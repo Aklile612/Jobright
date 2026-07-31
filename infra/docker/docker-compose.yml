@@ -1,12 +1,41 @@
 services:
   postgres:
-    image: postgres:16
-    # TODO: env, volumes, ports
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: jobright
+      POSTGRES_PASSWORD: jobright
+      POSTGRES_DB: jobright
+    ports:
+      - "5432:5432"
+    volumes:
+      - jobright_pg:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobright -d jobright"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   api:
-    build: ../../services/api
-    # TODO: depends_on, ports 8080
+    build:
+      context: ../../services/api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      API_PORT: "8080"
+      DATABASE_URL: postgres://jobright:jobright@postgres:5432/jobright?sslmode=disable
+      JWT_SECRET: change-me-in-production
+      CORS_ORIGINS: http://localhost:3000
+      RESUME_FORGE_URL: http://host.docker.internal:8000
+      UPLOAD_DIR: /app/storage/resumes
+    volumes:
+      - ../../storage/resumes:/app/storage/resumes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  ai:
-    build: ../../services/ai
-    # TODO: ports 5000
+volumes:
+  jobright_pg:
