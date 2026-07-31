@@ -1,0 +1,12 @@
+services:
+  postgres:
+    image: postgres:16
+    # TODO: env, volumes, ports
+
+  api:
+    build: ../../services/api
+    # TODO: depends_on, ports 8080
+
+  ai:
+    build: ../../services/ai
+    # TODO: ports 5000
