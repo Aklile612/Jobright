@@ -1,0 +1,6 @@
+{
+  "name": "@jobright/extension",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Plasmo Chrome extension scaffold (to be initialized)"
+}
