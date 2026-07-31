@@ -1,30 +1,43 @@
-# JobRight (clone)
+# JobRight
 
-Monorepo scaffold.
+Monorepo: Next.js frontend + Go API + Resume_forge (external) for ATS/CV forging.
 
-## Services
-
-| Path | Role | Port |
-|------|------|------|
-| `apps/web` | Next.js frontend | 3000 |
-| `apps/extension` | Plasmo Chrome extension (MV3) | — |
-| `services/api` | Go/Gin backend | 8080 |
-| `services/ai` | Python/FastAPI ATS matcher | 5000 |
-| `infra/docker` | Docker Compose (api + ai + postgres) | — |
-
-## Quick start (later)
+## Backend
 
 ```bash
-# Frontend
-cd apps/web && npm run dev
+# Postgres
+docker compose -f infra/docker/docker-compose.yml up postgres -d
 
-# Backend / AI / DB
-docker compose -f infra/docker/docker-compose.yml up
+# Resume_forge must be running on :8000 (your friend's service / fork)
+# https://github.com/HenokAsaye/Resume_forge  or  https://github.com/Aklile612/Resume_forge
+
+cp .env.example .env
+cd services/api && go run ./cmd/server
 ```
 
-## Docs
+Or full stack (API + Postgres):
 
-- `docs/architecture.md`
-- `docs/api.md`
-- `docs/data-flow.md`
-# Jobright
+```bash
+docker compose -f infra/docker/docker-compose.yml up --build
+```
+
+## Go API routes
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/v1/auth/signup` | no | Register (+ link Resume_forge) |
+| POST | `/api/v1/auth/login` | no | Login |
+| GET | `/api/v1/auth/me` | yes | Current user |
+| GET | `/api/v1/jobs` | no | List jobs |
+| POST | `/api/v1/jobs` | yes | Create job |
+| POST | `/api/v1/resumes` | yes | Upload resume (syncs to forge) |
+| POST | `/api/v1/applications` | yes | Track application |
+| POST | `/api/v1/applications/:id/score` | yes | ATS score via Resume_forge |
+| POST | `/api/v1/applications/:id/forge` | yes | Optimize CV via Resume_forge |
+| GET | `/api/v1/ext/autofill-data` | yes | Extension autofill |
+| POST | `/api/v1/admin/scrape` | yes | Scrape job URLs |
+
+## Architecture
+
+Next.js / Extension → Go `:8080` → PostgreSQL  
+Go → Resume_forge `:8000` for parse / ATS / optimize
