@@ -28,6 +28,8 @@ type User struct {
 	Website           string     `gorm:"size:255" json:"website"`
 	Location          string     `gorm:"size:120" json:"location"`
 	Headline          string     `gorm:"size:255" json:"headline"`
+	Skills            string     `gorm:"type:text" json:"skills"`
+	Education         string     `gorm:"type:text" json:"education"`
 	CoverLetter       string     `gorm:"type:text" json:"cover_letter"`
 	CurrentResumeID   *uuid.UUID `gorm:"type:uuid" json:"current_resume_id,omitempty"`
 	ForgeAccessToken  string     `gorm:"type:text" json:"-"`
