@@ -13,6 +13,7 @@ import (
 	"github.com/jobright/api/internal/forge"
 	"github.com/jobright/api/internal/middleware"
 	"github.com/jobright/api/internal/models"
+	"github.com/jobright/api/internal/resumeparse"
 	"github.com/jobright/api/pkg/response"
 	"gorm.io/gorm"
 )
@@ -29,6 +30,11 @@ func NewService(db *gorm.DB, authSvc *auth.Service, forgeClient *forge.Client, u
 	return &Service{db: db, auth: authSvc, forge: forgeClient, uploadDir: uploadDir, maxBytes: maxBytes}
 }
 
+type UploadResult struct {
+	Resume  *models.Resume `json:"resume"`
+	Profile gin.H          `json:"profile"`
+}
+
 func (s *Service) List(userID uuid.UUID) ([]models.Resume, error) {
 	var items []models.Resume
 	return items, s.db.Where("user_id = ?", userID).Order("created_at desc").Find(&items).Error
@@ -42,7 +48,7 @@ func (s *Service) Get(userID, id uuid.UUID) (*models.Resume, error) {
 	return &resume, nil
 }
 
-func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, content []byte) (*models.Resume, error) {
+func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, content []byte) (*UploadResult, error) {
 	if int64(len(content)) == 0 {
 		return nil, fmt.Errorf("empty file")
 	}
@@ -64,6 +70,10 @@ func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, c
 	if name == "" {
 		name = strings.TrimSuffix(filepath.Base(filename), ext)
 	}
+
+	text, _ := resumeparse.ExtractText(filename, content)
+	draft := resumeparse.ParseProfile(text)
+
 	resume := &models.Resume{
 		ID:          id,
 		UserID:      userID,
@@ -71,14 +81,66 @@ func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, c
 		FilePath:    stored,
 		FileName:    filepath.Base(filename),
 		ContentType: contentType,
+		ParsedText:  draft.RawText,
 	}
 	if err := s.db.Create(resume).Error; err != nil {
 		_ = os.Remove(stored)
 		return nil, err
 	}
-	_ = s.db.Model(&models.User{}).Where("id = ?", userID).Update("current_resume_id", resume.ID).Error
-	s.syncForge(userID, resume, content)
-	return resume, nil
+
+	user, err := s.auth.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	updates := map[string]any{
+		"current_resume_id": resume.ID,
+	}
+	if draft.Name != "" {
+		updates["name"] = draft.Name
+	}
+	if draft.Phone != "" {
+		updates["phone"] = draft.Phone
+	}
+	if draft.LinkedIn != "" {
+		updates["linkedin"] = draft.LinkedIn
+	}
+	if draft.GitHub != "" {
+		updates["github"] = draft.GitHub
+	}
+	if draft.Website != "" {
+		updates["website"] = draft.Website
+	}
+	if draft.Location != "" {
+		updates["location"] = draft.Location
+	}
+	if draft.Headline != "" {
+		updates["headline"] = draft.Headline
+	}
+	if draft.CoverLetter != "" {
+		updates["cover_letter"] = draft.CoverLetter
+	}
+	_ = s.db.Model(user).Updates(updates).Error
+	user, _ = s.auth.GetByID(userID)
+
+	go s.syncForge(userID, resume, content)
+
+	return &UploadResult{
+		Resume: resume,
+		Profile: gin.H{
+			"id":                user.ID,
+			"email":             user.Email,
+			"name":              user.Name,
+			"phone":             user.Phone,
+			"linkedin":          user.LinkedIn,
+			"github":            user.GitHub,
+			"website":           user.Website,
+			"location":          user.Location,
+			"headline":          user.Headline,
+			"cover_letter":      user.CoverLetter,
+			"current_resume_id": user.CurrentResumeID,
+		},
+	}, nil
 }
 
 func (s *Service) Delete(userID, id uuid.UUID) error {
@@ -178,12 +240,12 @@ func (h *Handler) Upload(c *gin.Context) {
 		response.Internal(c, "failed to read upload")
 		return
 	}
-	resume, err := h.svc.Upload(middleware.UserID(c), c.PostForm("name"), file.Filename, file.Header.Get("Content-Type"), content)
+	result, err := h.svc.Upload(middleware.UserID(c), c.PostForm("name"), file.Filename, file.Header.Get("Content-Type"), content)
 	if err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	response.Created(c, resume)
+	response.Created(c, result)
 }
 
 func (h *Handler) Delete(c *gin.Context) {
@@ -211,4 +273,12 @@ func (h *Handler) Download(c *gin.Context) {
 		return
 	}
 	c.FileAttachment(resume.FilePath, resume.FileName)
+}
+
+func (h *Handler) Register(rg *gin.RouterGroup) {
+	rg.GET("", h.List)
+	rg.GET("/:id", h.Get)
+	rg.GET("/:id/file", h.Download)
+	rg.POST("", h.Upload)
+	rg.DELETE("/:id", h.Delete)
 }
