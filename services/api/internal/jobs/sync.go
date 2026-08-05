@@ -62,6 +62,9 @@ func (s *Service) syncRemotive() SyncResult {
 		return res
 	}
 	for _, j := range payload.Jobs {
+		if !isSoftwareRelated(j.Title, nil) {
+			continue
+		}
 		job := &models.Job{
 			Title:       strings.TrimSpace(j.Title),
 			Company:     strings.TrimSpace(j.CompanyName),
@@ -179,6 +182,17 @@ func (s *Service) syncRemoteOK() SyncResult {
 			if slug, ok := row["slug"].(string); ok && slug != "" {
 				urlStr = "https://remoteok.com/remote-jobs/" + slug
 			}
+		}
+		tags := []string{}
+		if rawTags, ok := row["tags"].([]any); ok {
+			for _, t := range rawTags {
+				if s, ok := t.(string); ok {
+					tags = append(tags, s)
+				}
+			}
+		}
+		if !isSoftwareRelated(title+" "+strings.Join(tags, " "), tags) && !isSoftwareRelated(title, nil) {
+			continue
 		}
 		salary := ""
 		if smin, ok := row["salary_min"].(float64); ok && smin > 0 {
