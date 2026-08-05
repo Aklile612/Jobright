@@ -93,35 +93,46 @@ func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, c
 		return nil, err
 	}
 
-	updates := map[string]any{
-		"current_resume_id": resume.ID,
-	}
 	if draft.Name != "" {
-		updates["name"] = draft.Name
+		user.Name = draft.Name
 	}
 	if draft.Phone != "" {
-		updates["phone"] = draft.Phone
+		user.Phone = draft.Phone
 	}
 	if draft.LinkedIn != "" {
-		updates["linkedin"] = draft.LinkedIn
+		user.LinkedIn = draft.LinkedIn
 	}
 	if draft.GitHub != "" {
-		updates["github"] = draft.GitHub
+		user.GitHub = draft.GitHub
 	}
 	if draft.Website != "" {
-		updates["website"] = draft.Website
+		user.Website = draft.Website
 	}
 	if draft.Location != "" {
-		updates["location"] = draft.Location
+		user.Location = draft.Location
 	}
 	if draft.Headline != "" {
-		updates["headline"] = draft.Headline
+		user.Headline = draft.Headline
 	}
 	if draft.CoverLetter != "" {
-		updates["cover_letter"] = draft.CoverLetter
+		user.CoverLetter = draft.CoverLetter
 	}
-	_ = s.db.Model(user).Updates(updates).Error
-	user, _ = s.auth.GetByID(userID)
+	rid := resume.ID
+	user.CurrentResumeID = &rid
+
+	if err := s.db.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]any{
+		"name":              user.Name,
+		"phone":             user.Phone,
+		"linkedin":          user.LinkedIn,
+		"github":            user.GitHub,
+		"website":           user.Website,
+		"location":          user.Location,
+		"headline":          user.Headline,
+		"cover_letter":      user.CoverLetter,
+		"current_resume_id": rid,
+	}).Error; err != nil {
+		return nil, fmt.Errorf("failed to update profile from resume: %w", err)
+	}
 
 	go s.syncForge(userID, resume, content)
 
