@@ -28,6 +28,8 @@ type updateProfileRequest struct {
 	Website     string `json:"website"`
 	Location    string `json:"location"`
 	Headline    string `json:"headline"`
+	Skills      string `json:"skills"`
+	Education   string `json:"education"`
 	CoverLetter string `json:"cover_letter"`
 }
 
@@ -42,6 +44,8 @@ func toProfile(user *models.User) gin.H {
 		"website":           user.Website,
 		"location":          user.Location,
 		"headline":          user.Headline,
+		"skills":            user.Skills,
+		"education":         user.Education,
 		"cover_letter":      user.CoverLetter,
 		"current_resume_id": user.CurrentResumeID,
 	}
@@ -75,6 +79,8 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 		"website":      strings.TrimSpace(req.Website),
 		"location":     strings.TrimSpace(req.Location),
 		"headline":     strings.TrimSpace(req.Headline),
+		"skills":       strings.TrimSpace(req.Skills),
+		"education":    strings.TrimSpace(req.Education),
 		"cover_letter": strings.TrimSpace(req.CoverLetter),
 	}
 	if err := h.db.Model(user).Updates(updates).Error; err != nil {
