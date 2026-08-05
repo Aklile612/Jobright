@@ -70,6 +70,8 @@ export default function ProfilePage() {
       profile.website ||
       profile.location ||
       profile.headline ||
+      profile.skills ||
+      profile.education ||
       profile.cover_letter,
   );
 
@@ -79,7 +81,7 @@ export default function ProfilePage() {
       <div className="container section" style={{ maxWidth: 720 }}>
         <h1 className="page-title">Profile</h1>
         <p className="section-sub">
-          Upload your CV once. We extract name, links, location, headline, and experience into your profile for autofill.
+          Upload your CV once. We extract name, embedded links, skills, education, location, and experience for autofill.
         </p>
 
         <div
@@ -164,6 +166,22 @@ export default function ProfilePage() {
               </div>
             ))}
           </dl>
+
+          {profile.skills ? (
+            <div style={{ marginTop: "1rem" }}>
+              <div style={{ color: "var(--muted)", fontSize: "0.78rem", fontWeight: 700 }}>Skills</div>
+              <p style={{ margin: "0.35rem 0 0", lineHeight: 1.5 }}>{profile.skills}</p>
+            </div>
+          ) : null}
+
+          {profile.education ? (
+            <div style={{ marginTop: "1rem" }}>
+              <div style={{ color: "var(--muted)", fontSize: "0.78rem", fontWeight: 700 }}>Education</div>
+              <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                {profile.education}
+              </p>
+            </div>
+          ) : null}
 
           {profile.cover_letter ? (
             <div style={{ marginTop: "1rem" }}>
