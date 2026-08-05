@@ -60,8 +60,7 @@ export function ApplyWorkspace({ job }: { job: Job }) {
       setStatus("Log in to track this application and push autofill.");
       return null;
     }
-    const app = await api.upsertApplication(job.id, "applied");
-    return app;
+    return api.upsertApplication(job.id, "applied");
   }
 
   async function copyField(key: FieldKey) {
@@ -76,10 +75,7 @@ export function ApplyWorkspace({ job }: { job: Job }) {
       return;
     }
     frame.contentWindow.postMessage(
-      {
-        type: "jobright-autofill",
-        payload: fields,
-      },
+      { type: "jobright-autofill", payload: fields },
       "*",
     );
     setStatus("Autofill pushed into the application frame");
@@ -118,36 +114,41 @@ export function ApplyWorkspace({ job }: { job: Job }) {
   }
 
   return (
-    <div className="grid min-h-[calc(100vh-4.5rem)] lg:grid-cols-[360px_1fr]">
-      <aside className="border-r border-[var(--line)] bg-[rgba(255,255,255,0.75)] p-5 backdrop-blur">
-        <Link href={`/jobs/${job.id}`} className="text-sm font-semibold text-[var(--accent-deep)]">
+    <div className="apply-shell">
+      <aside className="apply-aside">
+        <Link href={`/jobs/${job.id}`} style={{ color: "var(--accent)", fontWeight: 700, fontSize: "0.9rem" }}>
           ← {job.title}
         </Link>
-        <h1 className="mt-3 font-[family-name:var(--font-display)] text-2xl font-extrabold leading-tight">
-          Apply in-site
-        </h1>
-        <p className="mt-1 text-sm text-[var(--ink-soft)]">
-          {job.company} · application opens here so you can autofill without an extension.
+        <h1>Apply in-site</h1>
+        <p className="section-sub" style={{ marginTop: "0.4rem" }}>
+          {job.company} · listing opens here with autofill beside it.
         </p>
 
         {!authed ? (
-          <div className="mt-4 rounded-2xl bg-[var(--paper-2)] p-4 text-sm">
-            <Link href="/login" className="font-bold text-[var(--accent-deep)]">
+          <div className="surface" style={{ marginTop: "1rem", padding: "0.9rem", borderRadius: 16 }}>
+            <Link href="/login" style={{ color: "var(--accent)", fontWeight: 700 }}>
               Log in
             </Link>{" "}
-            to load your resume fields and track this application.
+            to load resume fields and track this application.
           </div>
         ) : null}
 
-        <div className="mt-5 grid gap-3">
+        <div style={{ display: "grid", gap: "0.8rem", marginTop: "1.2rem" }}>
           {FIELD_META.map((field) => (
             <div key={field.key} className="field">
-              <div className="flex items-center justify-between">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <label htmlFor={field.key}>{field.label}</label>
                 <button
                   type="button"
-                  className="text-xs font-bold text-[var(--accent-deep)]"
                   onClick={() => copyField(field.key)}
+                  style={{
+                    background: "none",
+                    border: 0,
+                    color: "var(--accent)",
+                    fontWeight: 700,
+                    fontSize: "0.75rem",
+                    cursor: "pointer",
+                  }}
                 >
                   Copy
                 </button>
@@ -174,19 +175,19 @@ export function ApplyWorkspace({ job }: { job: Job }) {
           ))}
         </div>
 
-        <div className="mt-4 rounded-2xl border border-[var(--line)] bg-white p-3 text-sm">
-          <p className="font-semibold">Resume</p>
-          <p className="mt-1 text-[var(--ink-soft)]">
+        <div className="surface" style={{ marginTop: "1rem", padding: "0.9rem", borderRadius: 16 }}>
+          <p style={{ margin: 0, fontWeight: 700 }}>Resume</p>
+          <p className="section-sub" style={{ marginTop: "0.35rem" }}>
             {autofill?.has_resume
               ? autofill.resume_file_name || autofill.resume_name
               : "No resume uploaded yet"}
           </p>
-          <Link href="/resumes" className="mt-2 inline-block font-bold text-[var(--accent-deep)]">
+          <Link href="/resumes" style={{ color: "var(--accent)", fontWeight: 700, fontSize: "0.9rem" }}>
             Manage resumes
           </Link>
         </div>
 
-        <div className="mt-4 grid gap-2">
+        <div style={{ display: "grid", gap: "0.55rem", marginTop: "1rem" }}>
           <button type="button" className="btn btn-primary" onClick={pushAutofill}>
             Fill application form
           </button>
@@ -198,52 +199,35 @@ export function ApplyWorkspace({ job }: { job: Job }) {
           </button>
         </div>
 
-        <div className="mt-4 flex gap-2 text-xs">
+        <div className="mode-toggle">
           <button
             type="button"
-            className={`rounded-full px-3 py-1 font-bold ${
-              embedMode === "proxy"
-                ? "bg-[var(--accent)] text-white"
-                : "bg-[var(--paper-2)]"
-            }`}
+            className={embedMode === "proxy" ? "is-on" : ""}
             onClick={() => setEmbedMode("proxy")}
           >
             Proxied embed
           </button>
           <button
             type="button"
-            className={`rounded-full px-3 py-1 font-bold ${
-              embedMode === "direct"
-                ? "bg-[var(--accent)] text-white"
-                : "bg-[var(--paper-2)]"
-            }`}
+            className={embedMode === "direct" ? "is-on" : ""}
             onClick={() => setEmbedMode("direct")}
           >
             Direct URL
           </button>
         </div>
 
-        {status ? (
-          <p className="mt-3 rounded-xl bg-[var(--accent-soft)] px-3 py-2 text-sm font-semibold text-[var(--accent-deep)]">
-            {status}
-          </p>
-        ) : null}
+        {status ? <p className="status-pill">{status}</p> : null}
       </aside>
 
-      <section className="flex min-h-[70vh] flex-col bg-[#0d1f1a]">
-        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-sm text-white/80">
-          <div className="truncate">
-            <span className="mr-2 rounded-full bg-white/10 px-2 py-0.5 text-xs font-bold">
+      <section className="apply-frame">
+        <div className="apply-frame__bar">
+          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span className="badge" style={{ marginRight: "0.5rem" }}>
               Live
             </span>
             {job.source_url}
           </div>
-          <a
-            href={job.source_url}
-            target="_blank"
-            rel="noreferrer"
-            className="shrink-0 font-semibold text-[#9fe0c8]"
-          >
+          <a href={job.source_url} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", fontWeight: 700 }}>
             Open original
           </a>
         </div>
@@ -252,11 +236,10 @@ export function ApplyWorkspace({ job }: { job: Job }) {
             ref={iframeRef}
             title={`Apply · ${job.title}`}
             src={frameSrc}
-            className="min-h-0 flex-1 bg-white"
             sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
           />
         ) : (
-          <div className="grid flex-1 place-items-center text-white/70">
+          <div style={{ display: "grid", placeItems: "center", color: "var(--muted)", flex: 1 }}>
             No application URL for this role
           </div>
         )}
