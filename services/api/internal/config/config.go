@@ -16,6 +16,8 @@ type Config struct {
 	ResumeForgeURL  string
 	UploadDir       string
 	MaxUploadBytes  int64
+	GeminiAPIKey    string
+	GeminiModel     string
 }
 
 func Load() Config {
@@ -28,6 +30,8 @@ func Load() Config {
 		ResumeForgeURL: strings.TrimRight(getenv("RESUME_FORGE_URL", "http://localhost:8000"), "/"),
 		UploadDir:      getenv("UPLOAD_DIR", "../../storage/resumes"),
 		MaxUploadBytes: int64(getenvInt("MAX_UPLOAD_BYTES", 6*1024*1024)),
+		GeminiAPIKey:   getenv("GEMINI_API_KEY", ""),
+		GeminiModel:    getenv("GEMINI_MODEL", "gemini-2.0-flash"),
 	}
 }
 
