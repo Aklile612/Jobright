@@ -102,6 +102,19 @@ export const api = {
       { method: "POST" },
       true,
     ),
+  generateCoverLetter: (body: {
+    job_id?: string;
+    title?: string;
+    company?: string;
+    description?: string;
+    tone?: "professional" | "concise" | "enthusiastic";
+    extra?: string;
+  }) =>
+    request<{ cover_letter: string; tone: string }>(
+      "/api/v1/ai/cover-letter",
+      { method: "POST", body: JSON.stringify(body) },
+      true,
+    ),
   autofill: () => request<AutofillData>("/api/v1/ext/autofill-data", {}, true),
   /** Same-origin Next proxy — does not need Go API running */
   proxyUrl: (target: string) =>
