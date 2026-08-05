@@ -22,6 +22,13 @@ type User struct {
 	Email             string     `gorm:"uniqueIndex;size:255;not null" json:"email"`
 	PasswordHash      string     `gorm:"not null" json:"-"`
 	Name              string     `gorm:"size:120" json:"name"`
+	Phone             string     `gorm:"size:40" json:"phone"`
+	LinkedIn          string     `gorm:"size:255" json:"linkedin"`
+	GitHub            string     `gorm:"size:255" json:"github"`
+	Website           string     `gorm:"size:255" json:"website"`
+	Location          string     `gorm:"size:120" json:"location"`
+	Headline          string     `gorm:"size:255" json:"headline"`
+	CoverLetter       string     `gorm:"type:text" json:"cover_letter"`
 	CurrentResumeID   *uuid.UUID `gorm:"type:uuid" json:"current_resume_id,omitempty"`
 	ForgeAccessToken  string     `gorm:"type:text" json:"-"`
 	ForgeRefreshToken string     `gorm:"type:text" json:"-"`
