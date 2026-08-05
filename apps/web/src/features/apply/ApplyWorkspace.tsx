@@ -13,6 +13,7 @@ type FieldKey =
   | "linkedin"
   | "github"
   | "website"
+  | "skills"
   | "coverLetter";
 
 const FIELD_META: { key: FieldKey; label: string; multiline?: boolean }[] = [
@@ -22,6 +23,7 @@ const FIELD_META: { key: FieldKey; label: string; multiline?: boolean }[] = [
   { key: "linkedin", label: "LinkedIn" },
   { key: "github", label: "GitHub" },
   { key: "website", label: "Website" },
+  { key: "skills", label: "Skills", multiline: true },
   { key: "coverLetter", label: "Cover letter", multiline: true },
 ];
 
@@ -45,6 +47,7 @@ export function ApplyWorkspace({ job }: { job: Job }) {
     linkedin: "",
     github: "",
     website: "",
+    skills: "",
     coverLetter: "",
   });
 
@@ -62,6 +65,7 @@ export function ApplyWorkspace({ job }: { job: Job }) {
           linkedin: data.linkedin || "",
           github: data.github || "",
           website: data.website || "",
+          skills: data.skills || "",
           coverLetter: data.cover_letter || "",
         });
       })
