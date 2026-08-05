@@ -95,6 +95,7 @@ func injectAutofillBridge(html string) string {
       ['input[name*=linkedin i]', data.linkedin],
       ['input[name*=github i]', data.github],
       ['input[name*=portfolio i],input[name*=website i]', data.website],
+      ['input[name*=skill i],textarea[name*=skill i]', data.skills],
       ['textarea[name*=cover i],textarea[id*=cover i]', data.coverLetter]
     ];
     map.forEach(function(pair){
