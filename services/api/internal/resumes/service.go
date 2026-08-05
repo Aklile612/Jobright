@@ -71,8 +71,8 @@ func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, c
 		name = strings.TrimSuffix(filepath.Base(filename), ext)
 	}
 
-	text, _ := resumeparse.ExtractText(filename, content)
-	draft := resumeparse.ParseProfile(text)
+	text, links, _ := resumeparse.ExtractDocument(filename, content)
+	draft := resumeparse.ParseProfile(text, links)
 
 	resume := &models.Resume{
 		ID:          id,
@@ -114,6 +114,12 @@ func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, c
 	if draft.Headline != "" {
 		user.Headline = draft.Headline
 	}
+	if len(draft.Skills) > 0 {
+		user.Skills = strings.Join(draft.Skills, ", ")
+	}
+	if draft.Education != "" {
+		user.Education = draft.Education
+	}
 	if draft.CoverLetter != "" {
 		user.CoverLetter = draft.CoverLetter
 	}
@@ -128,6 +134,8 @@ func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, c
 		"website":           user.Website,
 		"location":          user.Location,
 		"headline":          user.Headline,
+		"skills":            user.Skills,
+		"education":         user.Education,
 		"cover_letter":      user.CoverLetter,
 		"current_resume_id": rid,
 	}).Error; err != nil {
@@ -148,6 +156,8 @@ func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, c
 			"website":           user.Website,
 			"location":          user.Location,
 			"headline":          user.Headline,
+			"skills":            user.Skills,
+			"education":         user.Education,
 			"cover_letter":      user.CoverLetter,
 			"current_resume_id": user.CurrentResumeID,
 		},
