@@ -33,15 +33,11 @@ export default function SignupPage() {
   return (
     <main>
       <SiteHeader solid />
-      <div className="container grid min-h-[70vh] place-items-center py-12">
-        <form onSubmit={onSubmit} className="surface w-full max-w-md rounded-[24px] p-8">
-          <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold">
-            Create your JobRight
-          </h1>
-          <p className="mt-2 text-sm text-[var(--ink-soft)]">
-            One account for jobs, scoring, forging, and in-site apply.
-          </p>
-          <div className="mt-6 grid gap-4">
+      <div className="container auth-shell">
+        <div className="surface auth-card">
+          <h1>Create your JobRight</h1>
+          <p>One account for jobs, scoring, forging, and in-site apply.</p>
+          <form onSubmit={onSubmit}>
             <div className="field">
               <label htmlFor="name">Full name</label>
               <input
@@ -72,18 +68,18 @@ export default function SignupPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            {error ? <p className="text-sm text-[var(--warn)]">{error}</p> : null}
-            <button className="btn btn-primary w-full" disabled={loading}>
+            {error ? <p style={{ color: "var(--warn)", margin: 0 }}>{error}</p> : null}
+            <button className="btn btn-primary" disabled={loading}>
               {loading ? "Creating…" : "Sign up"}
             </button>
-          </div>
-          <p className="mt-4 text-sm text-[var(--ink-soft)]">
+          </form>
+          <p style={{ marginTop: "1rem" }}>
             Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-[var(--accent-deep)]">
+            <Link href="/login" style={{ color: "var(--accent)", fontWeight: 700 }}>
               Log in
             </Link>
           </p>
-        </form>
+        </div>
       </div>
     </main>
   );
