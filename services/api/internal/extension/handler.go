@@ -21,6 +21,13 @@ func NewHandler(db *gorm.DB, authSvc *auth.Service) *Handler {
 type autofillResponse struct {
 	Name         string `json:"name"`
 	Email        string `json:"email"`
+	Phone        string `json:"phone"`
+	LinkedIn     string `json:"linkedin"`
+	GitHub       string `json:"github"`
+	Website      string `json:"website"`
+	Location     string `json:"location"`
+	Headline     string `json:"headline"`
+	CoverLetter  string `json:"cover_letter"`
 	ResumeID     string `json:"resume_id,omitempty"`
 	ResumeName   string `json:"resume_name,omitempty"`
 	ResumeFile   string `json:"resume_file_name,omitempty"`
@@ -36,8 +43,15 @@ func (h *Handler) AutofillData(c *gin.Context) {
 		return
 	}
 	out := autofillResponse{
-		Name:  user.Name,
-		Email: user.Email,
+		Name:        user.Name,
+		Email:       user.Email,
+		Phone:       user.Phone,
+		LinkedIn:    user.LinkedIn,
+		GitHub:      user.GitHub,
+		Website:     user.Website,
+		Location:    user.Location,
+		Headline:    user.Headline,
+		CoverLetter: user.CoverLetter,
 	}
 	if user.CurrentResumeID != nil {
 		var resume models.Resume
