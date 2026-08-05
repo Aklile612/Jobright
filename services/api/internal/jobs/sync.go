@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ type SyncResult struct {
 
 func (s *Service) SyncSoftwareJobs() ([]SyncResult, error) {
 	results := []SyncResult{
+		s.syncJobRight(),
 		s.syncRemotive(),
 		s.syncArbeitnow(),
 		s.syncRemoteOK(),
@@ -229,6 +231,128 @@ func isSoftwareRelated(title string, tags []string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Service) syncJobRight() SyncResult {
+	res := SyncResult{Source: "jobright.ai"}
+	pages := []string{
+		"https://jobright.ai/remote-jobs/software-engineering",
+		"https://jobright.ai/remote-jobs",
+		"https://jobright.ai/jobs/backend-engineer",
+		"https://jobright.ai/jobs/full-stack-engineer",
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	seen := map[string]struct{}{}
+	for _, page := range pages {
+		req, err := http.NewRequest(http.MethodGet, page, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; JobRightClone/1.0)")
+		req.Header.Set("Accept", "text/html")
+		resp, err := client.Do(req)
+		if err != nil {
+			res.Error = err.Error()
+			continue
+		}
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		resp.Body.Close()
+		if err != nil || resp.StatusCode >= 300 {
+			continue
+		}
+		jobs, err := parseJobRightNextData(body)
+		if err != nil {
+			res.Error = err.Error()
+			continue
+		}
+		for _, j := range jobs {
+			if j.SourceURL == "" || j.Title == "" {
+				continue
+			}
+			if _, ok := seen[j.SourceURL]; ok {
+				continue
+			}
+			seen[j.SourceURL] = struct{}{}
+			if err := s.UpsertBySourceURL(j); err == nil {
+				res.Ingested++
+			}
+		}
+	}
+	return res
+}
+
+func parseJobRightNextData(html []byte) ([]*models.Job, error) {
+	re := regexp.MustCompile(`(?s)<script id="__NEXT_DATA__"[^>]*>(.*?)</script>`)
+	m := re.FindSubmatch(html)
+	if m == nil {
+		return nil, fmt.Errorf("jobright next data missing")
+	}
+	var payload struct {
+		Props struct {
+			PageProps struct {
+				DefaultData []struct {
+					JobResult struct {
+						JobID                 string   `json:"jobId"`
+						JobTitle              string   `json:"jobTitle"`
+						JobLocation           string   `json:"jobLocation"`
+						JobSummary            string   `json:"jobSummary"`
+						SalaryDesc            string   `json:"salaryDesc"`
+						URL                   string   `json:"url"`
+						ApplyLink             string   `json:"applyLink"`
+						CoreResponsibilities  []string `json:"coreResponsibilities"`
+						Requirements          []string `json:"requirements"`
+					} `json:"jobResult"`
+				} `json:"defaultData"`
+			} `json:"pageProps"`
+		} `json:"props"`
+	}
+	if err := json.Unmarshal(m[1], &payload); err != nil {
+		return nil, err
+	}
+	out := make([]*models.Job, 0, len(payload.Props.PageProps.DefaultData))
+	for _, row := range payload.Props.PageProps.DefaultData {
+		jr := row.JobResult
+		source := strings.TrimSpace(jr.ApplyLink)
+		if source == "" {
+			source = strings.TrimSpace(jr.URL)
+		}
+		if source == "" && jr.JobID != "" {
+			source = "https://jobright.ai/jobs/info/" + jr.JobID
+		}
+		descParts := []string{jr.JobSummary}
+		if len(jr.CoreResponsibilities) > 0 {
+			descParts = append(descParts, "Responsibilities: "+strings.Join(jr.CoreResponsibilities, "; "))
+		}
+		if len(jr.Requirements) > 0 {
+			descParts = append(descParts, "Requirements: "+strings.Join(jr.Requirements, "; "))
+		}
+		company := companyFromSummary(jr.JobSummary)
+		out = append(out, &models.Job{
+			Title:       strings.TrimSpace(jr.JobTitle),
+			Company:     company,
+			Description: strings.TrimSpace(strings.Join(descParts, "\n\n")),
+			Location:    nonEmpty(jr.JobLocation, "Remote"),
+			SourceURL:   source,
+			SalaryRange: strings.TrimSpace(jr.SalaryDesc),
+		})
+	}
+	return out, nil
+}
+
+func companyFromSummary(summary string) string {
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return "JobRight"
+	}
+	re := regexp.MustCompile(`(?i)^([A-Za-z0-9][A-Za-z0-9&.'\-]{0,40})\s+is\s+(?:a|an)\b`)
+	if m := re.FindStringSubmatch(summary); len(m) == 2 {
+		return strings.TrimSpace(m[1])
+	}
+	parts := strings.Fields(summary)
+	if len(parts) >= 1 && len(parts[0]) <= 40 {
+		return parts[0]
+	}
+	return "JobRight"
 }
 
 func stripHTML(s string) string {
