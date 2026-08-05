@@ -2,33 +2,119 @@ import type { Job } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
-async function syncThenList(): Promise<Job[]> {
+export async function loadSoftwareJobs(): Promise<Job[]> {
+  const fromApi = await loadFromGoApi();
+  if (fromApi.length > 0) return fromApi;
+
+  const fromRemotive = await loadFromRemotive();
+  if (fromRemotive.length > 0) return fromRemotive;
+
+  return demoJobs();
+}
+
+async function loadFromGoApi(): Promise<Job[]> {
   try {
     await fetch(`${API_URL}/api/v1/jobs/sync`, {
       method: "POST",
       cache: "no-store",
     });
   } catch {
-    // API may be offline; fall through to list / demo data
+    // API may be offline
   }
 
   try {
-    const res = await fetch(`${API_URL}/api/v1/jobs?limit=60`, {
-      cache: "no-store",
-    });
-    if (res.ok) {
-      const jobs = (await res.json()) as Job[];
-      if (jobs.length > 0) return jobs;
-    }
+    const res = await fetch(`${API_URL}/api/v1/jobs?limit=60`, { cache: "no-store" });
+    if (!res.ok) return [];
+    const jobs = (await res.json()) as Job[];
+    return Array.isArray(jobs) ? jobs : [];
   } catch {
-    // ignore
+    return [];
   }
-
-  return demoJobs();
 }
 
-export async function loadSoftwareJobs(): Promise<Job[]> {
-  return syncThenList();
+async function loadFromRemotive(): Promise<Job[]> {
+  try {
+    const res = await fetch(
+      "https://remotive.com/api/remote-jobs?category=software-dev",
+      {
+        headers: { "User-Agent": "jobright/1.0" },
+        next: { revalidate: 300 },
+      },
+    );
+    if (!res.ok) return [];
+    const payload = (await res.json()) as {
+      jobs?: Array<{
+        id: number;
+        url: string;
+        title: string;
+        company_name: string;
+        description: string;
+        candidate_required_location?: string;
+        salary?: string;
+        publication_date?: string;
+      }>;
+    };
+
+    return (payload.jobs || [])
+      .filter((j) => j.url && j.title)
+      .filter((j) => {
+        try {
+          return /-\d+$/.test(new URL(j.url).pathname);
+        } catch {
+          return false;
+        }
+      })
+      .filter((j) => isSoftwareRole(j.title, j.description || ""))
+      .slice(0, 40)
+      .map((j) => ({
+        id: `remotive-${j.id}`,
+        title: j.title,
+        company: j.company_name || "Company",
+        description: stripHtml(j.description || ""),
+        location: j.candidate_required_location || "Remote",
+        source_url: j.url,
+        salary_range: j.salary || "",
+        created_at: j.publication_date || new Date().toISOString(),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function stripHtml(s: string) {
+  return s
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 8000);
+}
+
+function isSoftwareRole(title: string, description: string) {
+  const hay = `${title} ${description}`.toLowerCase();
+  const keys = [
+    "software",
+    "engineer",
+    "developer",
+    "frontend",
+    "backend",
+    "full stack",
+    "fullstack",
+    "devops",
+    "sre",
+    "platform",
+    "react",
+    "typescript",
+    "golang",
+    "python",
+    "java",
+    "mobile",
+    "ios",
+    "android",
+    "qa engineer",
+    "machine learning",
+    "data engineer",
+  ];
+  return keys.some((k) => hay.includes(k));
 }
 
 function demoJobs(): Job[] {
@@ -39,9 +125,9 @@ function demoJobs(): Job[] {
       title: "Senior Backend Engineer (Go)",
       company: "Northwind Labs",
       description:
-        "Build high-throughput APIs in Go, own Postgres schemas, and ship hiring tooling integrations. Experience with Gin/Gorm preferred.",
+        "Build high-throughput APIs in Go, own Postgres schemas, and ship hiring tooling integrations.",
       location: "Remote · EU",
-      source_url: "https://remotive.com/remote-jobs/software-dev",
+      source_url: "https://remoteok.com/remote-jobs",
       salary_range: "$140k–$180k",
       created_at: now,
     },
@@ -50,54 +136,10 @@ function demoJobs(): Job[] {
       title: "Full Stack Engineer — TypeScript",
       company: "Harbor AI",
       description:
-        "Next.js product surfaces, FastAPI services, and resume intelligence features. Strong TypeScript and system design.",
+        "Next.js product surfaces and API services for resume intelligence features.",
       location: "Remote · US",
-      source_url: "https://remoteok.com/",
+      source_url: "https://remotive.com/remote-jobs",
       salary_range: "$130k–$165k",
-      created_at: now,
-    },
-    {
-      id: "demo-3",
-      title: "Platform / DevOps Engineer",
-      company: "Cedar Systems",
-      description:
-        "Kubernetes, CI/CD, observability, and developer experience for a distributed hiring platform.",
-      location: "Berlin / Hybrid",
-      source_url: "https://www.arbeitnow.com/",
-      salary_range: "€90k–€120k",
-      created_at: now,
-    },
-    {
-      id: "demo-4",
-      title: "Frontend Engineer (React)",
-      company: "Lumen Hire",
-      description:
-        "Craft application workspaces, job feeds, and autofill UX. Care about accessibility and motion.",
-      location: "Remote",
-      source_url: "https://remotive.com/remote-jobs/software-dev",
-      salary_range: "$120k–$150k",
-      created_at: now,
-    },
-    {
-      id: "demo-5",
-      title: "Machine Learning Engineer",
-      company: "ForgeMatch",
-      description:
-        "ATS scoring models, keyword extraction, and resume rewriting pipelines with evaluation harnesses.",
-      location: "Remote · Worldwide",
-      source_url: "https://remoteok.com/",
-      salary_range: "$150k–$190k",
-      created_at: now,
-    },
-    {
-      id: "demo-6",
-      title: "Junior Software Engineer",
-      company: "Stackyard",
-      description:
-        "Grow across React and Go services. Mentorship-heavy team shipping job search products.",
-      location: "Addis Ababa / Remote",
-      source_url: "https://www.arbeitnow.com/",
-      salary_range: "Competitive",
       created_at: now,
     },
   ];
