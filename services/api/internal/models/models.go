@@ -23,8 +23,8 @@ type User struct {
 	PasswordHash      string     `gorm:"not null" json:"-"`
 	Name              string     `gorm:"size:120" json:"name"`
 	Phone             string     `gorm:"size:40" json:"phone"`
-	LinkedIn          string     `gorm:"size:255" json:"linkedin"`
-	GitHub            string     `gorm:"size:255" json:"github"`
+	LinkedIn          string     `gorm:"column:linkedin;size:255" json:"linkedin"`
+	GitHub            string     `gorm:"column:github;size:255" json:"github"`
 	Website           string     `gorm:"size:255" json:"website"`
 	Location          string     `gorm:"size:120" json:"location"`
 	Headline          string     `gorm:"size:255" json:"headline"`
