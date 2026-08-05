@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { isAuthenticated } from "@/lib/auth";
+import { resolveApplyUrl } from "@/lib/jobs/resolveApplyUrl";
 import type { AutofillData, Job } from "@/lib/types";
 
 type FieldKey =
@@ -33,13 +34,27 @@ function isUuid(id: string) {
   );
 }
 
+function splitName(full: string) {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  return {
+    first: parts[0] || "",
+    last: parts.length > 1 ? parts.slice(1).join(" ") : "",
+  };
+}
+
 export function ApplyWorkspace({ job }: { job: Job }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const fieldsRef = useRef<Record<FieldKey, string> | null>(null);
   const [authed, setAuthed] = useState(false);
   const [autofill, setAutofill] = useState<AutofillData | null>(null);
   const [status, setStatus] = useState("");
   const [embedMode, setEmbedMode] = useState<"proxy" | "direct">("proxy");
   const [frameError, setFrameError] = useState(false);
+  const [filledCount, setFilledCount] = useState<number | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [tone, setTone] = useState<"professional" | "concise" | "enthusiastic">(
+    "professional",
+  );
   const [fields, setFields] = useState<Record<FieldKey, string>>({
     name: "",
     email: "",
@@ -50,6 +65,10 @@ export function ApplyWorkspace({ job }: { job: Job }) {
     skills: "",
     coverLetter: "",
   });
+
+  fieldsRef.current = fields;
+
+  const applyUrl = useMemo(() => resolveApplyUrl(job.source_url), [job.source_url]);
 
   useEffect(() => {
     setAuthed(isAuthenticated());
@@ -69,18 +88,86 @@ export function ApplyWorkspace({ job }: { job: Job }) {
           coverLetter: data.cover_letter || "",
         });
       })
-      .catch(() => undefined);
+      .catch(() =>
+        setStatus("Could not load profile — log in and upload a resume on Profile."),
+      );
   }, []);
 
   const frameSrc = useMemo(() => {
-    if (!job.source_url) return "";
-    if (embedMode === "direct") return job.source_url;
-    return api.proxyUrl(job.source_url);
-  }, [job.source_url, embedMode]);
+    if (!applyUrl) return "";
+    if (embedMode === "direct") return applyUrl;
+    return api.proxyUrl(applyUrl);
+  }, [applyUrl, embedMode]);
 
   useEffect(() => {
     setFrameError(false);
+    setFilledCount(null);
   }, [frameSrc]);
+
+  const buildPayload = useCallback(() => {
+    const f = fieldsRef.current || fields;
+    const { first, last } = splitName(f.name);
+    return {
+      ...f,
+      firstName: first,
+      lastName: last,
+      cover_letter: f.coverLetter,
+      location: autofill?.location || "",
+      headline: autofill?.headline || "",
+    };
+  }, [fields, autofill]);
+
+  const pushAutofill = useCallback(
+    (silent = false) => {
+      if (embedMode === "direct") {
+        if (!silent) {
+          setStatus("Switch to “In JobRight” mode to autofill inside the page.");
+        }
+        return;
+      }
+      const frame = iframeRef.current;
+      if (!frame?.contentWindow) {
+        if (!silent) setStatus("Application frame not ready yet.");
+        return;
+      }
+      const payload = buildPayload();
+      const missing = ["name", "email"].filter(
+        (k) => !payload[k as keyof typeof payload],
+      );
+      if (missing.length && !silent) {
+        setStatus(`Fill ${missing.join(" & ")} in the left panel (or upload a CV on Profile), then try again.`);
+      }
+      frame.contentWindow.postMessage(
+        { type: "jobright-autofill", payload },
+        "*",
+      );
+      if (!silent) setStatus("Filling matching fields in the application form…");
+    },
+    [embedMode, buildPayload],
+  );
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "jobright-autofill-ready") {
+        pushAutofill(true);
+      }
+      if (data.type === "jobright-autofill-result") {
+        const n = Number(data.filled) || 0;
+        setFilledCount(n);
+        if (n > 0) {
+          setStatus(`Filled ${n} field${n === 1 ? "" : "s"} on the application form.`);
+        } else {
+          setStatus(
+            "No matching fields yet — open steps on the form (e.g. continue after email), then click Autofill again. Or use Copy + Open original.",
+          );
+        }
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [pushAutofill]);
 
   async function ensureApplication() {
     if (!isAuthenticated()) {
@@ -99,21 +186,32 @@ export function ApplyWorkspace({ job }: { job: Job }) {
     setStatus(`Copied ${key}`);
   }
 
-  function pushAutofill() {
-    if (embedMode === "direct") {
-      setStatus("Switch to “In JobRight” mode to autofill inside the page.");
+  async function generateCoverLetter() {
+    if (!isAuthenticated()) {
+      setStatus("Log in to generate a cover letter.");
       return;
     }
-    const frame = iframeRef.current;
-    if (!frame?.contentWindow) {
-      setStatus("Application frame not ready yet.");
-      return;
+    setGenerating(true);
+    setStatus("Writing cover letter with Gemini…");
+    try {
+      const result = await api.generateCoverLetter({
+        job_id: isUuid(job.id) ? job.id : undefined,
+        title: job.title,
+        company: job.company,
+        description: job.description,
+        tone,
+      });
+      setFields((prev) => ({ ...prev, coverLetter: result.cover_letter }));
+      setStatus("Cover letter ready — edit it, then Autofill / Copy.");
+    } catch (err) {
+      setStatus(
+        err instanceof Error
+          ? err.message
+          : "Cover letter failed — check GEMINI_API_KEY and API.",
+      );
+    } finally {
+      setGenerating(false);
     }
-    frame.contentWindow.postMessage(
-      { type: "jobright-autofill", payload: fields },
-      "*",
-    );
-    setStatus("Tried to fill matching fields in the form.");
   }
 
   async function score() {
@@ -131,6 +229,8 @@ export function ApplyWorkspace({ job }: { job: Job }) {
       setStatus(err instanceof Error ? err.message : "Score failed — is the API running?");
     }
   }
+
+  const profileReady = Boolean(fields.name && fields.email);
 
   return (
     <div className="apply-shell">
@@ -153,6 +253,16 @@ export function ApplyWorkspace({ job }: { job: Job }) {
               profile + resume
             </Link>{" "}
             so these fields fill automatically.
+          </div>
+        ) : null}
+
+        {authed && !profileReady ? (
+          <div className="notice">
+            Your profile is missing name/email.{" "}
+            <Link href="/profile" style={{ fontWeight: 700, textDecoration: "underline" }}>
+              Upload a CV
+            </Link>{" "}
+            or type them below, then click Autofill.
           </div>
         ) : null}
 
@@ -211,7 +321,41 @@ export function ApplyWorkspace({ job }: { job: Job }) {
         </div>
 
         <div style={{ display: "grid", gap: "0.45rem", marginTop: "0.85rem" }}>
-          <button type="button" className="btn btn-primary" onClick={pushAutofill}>
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+            {(
+              [
+                ["professional", "Pro"],
+                ["concise", "Short"],
+                ["enthusiastic", "Bold"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`btn btn-ghost btn-sm${tone === value ? " is-on" : ""}`}
+                onClick={() => setTone(value)}
+                style={{
+                  opacity: tone === value ? 1 : 0.7,
+                  borderColor: tone === value ? "var(--text)" : undefined,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={generating}
+            onClick={generateCoverLetter}
+          >
+            {generating ? "Writing…" : "Generate cover letter (AI)"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => pushAutofill(false)}
+          >
             Autofill form
           </button>
           <button type="button" className="btn btn-ghost" onClick={score}>
@@ -236,10 +380,11 @@ export function ApplyWorkspace({ job }: { job: Job }) {
           </button>
         </div>
 
-        {frameError ? (
+        {frameError || filledCount === 0 ? (
           <div className="notice">
-            This board blocked embedding. Use <strong>Copy</strong> on fields, or open the
-            original listing.
+            Some boards only show an email step first, or block embeds. Enter email → continue on
+            the form, click <strong>Autofill</strong> again, or use <strong>Copy</strong> +{" "}
+            <strong>Open original</strong>.
           </div>
         ) : null}
 
@@ -249,10 +394,10 @@ export function ApplyWorkspace({ job }: { job: Job }) {
       <section className="apply-frame">
         <div className="apply-frame__bar">
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {job.source_url}
+            {applyUrl}
           </span>
           <a
-            href={job.source_url}
+            href={applyUrl}
             target="_blank"
             rel="noreferrer"
             style={{ fontWeight: 700, color: "var(--text)", flexShrink: 0 }}
@@ -266,6 +411,10 @@ export function ApplyWorkspace({ job }: { job: Job }) {
             title={`Apply · ${job.title}`}
             src={frameSrc}
             sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            onLoad={() => {
+              setTimeout(() => pushAutofill(true), 400);
+              setTimeout(() => pushAutofill(true), 1500);
+            }}
             onError={() => setFrameError(true)}
           />
         ) : (
@@ -277,4 +426,3 @@ export function ApplyWorkspace({ job }: { job: Job }) {
     </div>
   );
 }
-
