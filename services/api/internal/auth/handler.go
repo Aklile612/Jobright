@@ -34,6 +34,13 @@ type userResponse struct {
 	ID              uuid.UUID  `json:"id"`
 	Email           string     `json:"email"`
 	Name            string     `json:"name"`
+	Phone           string     `json:"phone"`
+	LinkedIn        string     `json:"linkedin"`
+	GitHub          string     `json:"github"`
+	Website         string     `json:"website"`
+	Location        string     `json:"location"`
+	Headline        string     `json:"headline"`
+	CoverLetter     string     `json:"cover_letter"`
 	CurrentResumeID *uuid.UUID `json:"current_resume_id,omitempty"`
 }
 
@@ -83,6 +90,13 @@ func toUser(u *models.User) userResponse {
 		ID:              u.ID,
 		Email:           u.Email,
 		Name:            u.Name,
+		Phone:           u.Phone,
+		LinkedIn:        u.LinkedIn,
+		GitHub:          u.GitHub,
+		Website:         u.Website,
+		Location:        u.Location,
+		Headline:        u.Headline,
+		CoverLetter:     u.CoverLetter,
 		CurrentResumeID: u.CurrentResumeID,
 	}
 }
