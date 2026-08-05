@@ -8,6 +8,8 @@ export type User = {
   website?: string;
   location?: string;
   headline?: string;
+  skills?: string;
+  education?: string;
   cover_letter?: string;
   current_resume_id?: string | null;
 };
@@ -57,6 +59,8 @@ export type AutofillData = {
   website?: string;
   location?: string;
   headline?: string;
+  skills?: string;
+  education?: string;
   cover_letter?: string;
   resume_id?: string;
   resume_name?: string;
