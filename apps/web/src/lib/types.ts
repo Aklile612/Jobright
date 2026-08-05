@@ -2,6 +2,13 @@ export type User = {
   id: string;
   email: string;
   name: string;
+  phone?: string;
+  linkedin?: string;
+  github?: string;
+  website?: string;
+  location?: string;
+  headline?: string;
+  cover_letter?: string;
   current_resume_id?: string | null;
 };
 
@@ -44,6 +51,13 @@ export type Application = {
 export type AutofillData = {
   name: string;
   email: string;
+  phone?: string;
+  linkedin?: string;
+  github?: string;
+  website?: string;
+  location?: string;
+  headline?: string;
+  cover_letter?: string;
   resume_id?: string;
   resume_name?: string;
   resume_file_name?: string;
