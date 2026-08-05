@@ -41,9 +41,7 @@ export default function ApplicationsPage() {
     setBusyId(id);
     try {
       const result = await api.forgeApplication(id);
-      setItems((prev) =>
-        prev.map((a) => (a.id === id ? result.application : a)),
-      );
+      setItems((prev) => prev.map((a) => (a.id === id ? result.application : a)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Forge failed");
     } finally {
@@ -54,46 +52,42 @@ export default function ApplicationsPage() {
   return (
     <main>
       <SiteHeader solid />
-      <div className="container py-10">
-        <h1 className="font-[family-name:var(--font-display)] text-4xl font-extrabold">
-          Applications
-        </h1>
-        <p className="mt-2 text-[var(--ink-soft)]">
+      <div className="container section">
+        <h1 className="page-title">Applications</h1>
+        <p className="section-sub">
           Track status, pull ATS scores, and forge resumes per role.
         </p>
-        {error ? <p className="mt-4 text-sm text-[var(--warn)]">{error}</p> : null}
+        {error ? <p style={{ color: "var(--warn)", marginTop: "1rem" }}>{error}</p> : null}
 
-        <div className="mt-8 grid gap-4">
+        <div style={{ display: "grid", gap: "1rem", marginTop: "2rem" }}>
           {items.map((app) => (
-            <article key={app.id} className="surface rounded-[20px] p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <article key={app.id} className="job-card">
+              <div className="job-card__top">
                 <div>
-                  <p className="badge mb-2 capitalize">{app.status}</p>
-                  <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold">
-                    {app.job?.title || "Role"}
-                  </h2>
-                  <p className="text-sm text-[var(--ink-soft)]">
+                  <p className="badge" style={{ textTransform: "capitalize" }}>
+                    {app.status}
+                  </p>
+                  <h3>{app.job?.title || "Role"}</h3>
+                  <p className="job-meta">
                     {app.job?.company}
-                    {app.match_score != null
-                      ? ` · score ${app.match_score.toFixed(0)}`
-                      : ""}
+                    {app.match_score != null ? ` · score ${app.match_score.toFixed(0)}` : ""}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="job-actions">
                   {app.job_id ? (
-                    <Link href={`/jobs/${app.job_id}/apply`} className="btn btn-primary text-sm">
+                    <Link href={`/jobs/${app.job_id}/apply`} className="btn btn-primary btn-sm">
                       Continue apply
                     </Link>
                   ) : null}
                   <button
-                    className="btn btn-ghost text-sm"
+                    className="btn btn-ghost btn-sm"
                     disabled={busyId === app.id}
                     onClick={() => score(app.id)}
                   >
                     Score
                   </button>
                   <button
-                    className="btn btn-ghost text-sm"
+                    className="btn btn-ghost btn-sm"
                     disabled={busyId === app.id}
                     onClick={() => forge(app.id)}
                   >
@@ -102,16 +96,16 @@ export default function ApplicationsPage() {
                 </div>
               </div>
               {app.missing_keywords?.length ? (
-                <p className="mt-3 text-sm text-[var(--ink-soft)]">
+                <p className="job-desc">
                   Missing: {app.missing_keywords.slice(0, 8).join(", ")}
                 </p>
               ) : null}
             </article>
           ))}
           {items.length === 0 ? (
-            <div className="surface rounded-[20px] p-8 text-center">
-              <p className="font-bold">No applications yet</p>
-              <Link href="/jobs" className="btn btn-primary mt-4 inline-flex">
+            <div className="surface empty-state">
+              <p style={{ fontWeight: 700, margin: 0 }}>No applications yet</p>
+              <Link href="/jobs" className="btn btn-primary" style={{ marginTop: "1rem" }}>
                 Find a role
               </Link>
             </div>
