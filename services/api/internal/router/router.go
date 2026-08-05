@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jobright/api/internal/ai"
 	"github.com/jobright/api/internal/applications"
 	"github.com/jobright/api/internal/auth"
 	"github.com/jobright/api/internal/bookmarks"
@@ -27,6 +28,7 @@ type Deps struct {
 	Bookmarks    *bookmarks.Handler
 	Extension    *extension.Handler
 	Scraper      *scraper.Handler
+	AI           *ai.Handler
 }
 
 func New(deps Deps) *gin.Engine {
@@ -60,6 +62,9 @@ func New(deps Deps) *gin.Engine {
 		deps.Bookmarks.Register(protected.Group("/bookmarks"))
 		deps.Scraper.Register(protected.Group("/admin"))
 		deps.Extension.Register(protected.Group("/ext"))
+		if deps.AI != nil {
+			deps.AI.Register(protected.Group("/ai"))
+		}
 	}
 
 	return r
