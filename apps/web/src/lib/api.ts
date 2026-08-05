@@ -57,6 +57,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
   me: () => request<User>("/api/v1/auth/me", {}, true),
+  getProfile: () => request<User>("/api/v1/users/me", {}, true),
+  updateProfile: (body: Partial<User>) =>
+    request<User>("/api/v1/users/me", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }, true),
   listJobs: (q = "", limit = 40) =>
     request<Job[]>(`/api/v1/jobs?q=${encodeURIComponent(q)}&limit=${limit}`),
   getJob: (id: string) => request<Job>(`/api/v1/jobs/${id}`),
@@ -93,8 +99,9 @@ export const api = {
       true,
     ),
   autofill: () => request<AutofillData>("/api/v1/ext/autofill-data", {}, true),
+  /** Same-origin Next proxy — does not need Go API running */
   proxyUrl: (target: string) =>
-    `${API_URL}/api/v1/proxy?url=${encodeURIComponent(target)}`,
+    `/api/proxy?url=${encodeURIComponent(target)}`,
 };
 
 export { API_URL };
