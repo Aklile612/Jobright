@@ -11,6 +11,7 @@ import (
 	"github.com/jobright/api/internal/extension"
 	"github.com/jobright/api/internal/jobs"
 	"github.com/jobright/api/internal/middleware"
+	"github.com/jobright/api/internal/proxy"
 	"github.com/jobright/api/internal/resumes"
 	"github.com/jobright/api/internal/scraper"
 	"github.com/jobright/api/internal/users"
@@ -44,7 +45,10 @@ func New(deps Deps) *gin.Engine {
 
 		jobsPublic := api.Group("/jobs")
 		jobsPublic.GET("", deps.Jobs.List)
+		jobsPublic.POST("/sync", deps.Jobs.Sync)
 		jobsPublic.GET("/:id", deps.Jobs.Get)
+
+		api.GET("/proxy", proxy.Handler)
 
 		protected := api.Group("")
 		protected.Use(middleware.Auth(deps.Config.JWTSecret))
