@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 const links = [
   { href: "/jobs", label: "Jobs" },
   { href: "/applications", label: "Applications" },
-  { href: "/resumes", label: "Resumes" },
+  { href: "/profile", label: "Profile" },
 ];
 
 export function SiteHeader({ solid = false }: { solid?: boolean }) {
@@ -23,7 +23,7 @@ export function SiteHeader({ solid = false }: { solid?: boolean }) {
     <header className={`site-header ${solid ? "is-solid" : ""}`}>
       <div className="container site-header__inner">
         <Link href="/" className="brand">
-          Job<span>Right</span>
+          JobRight
         </Link>
         <nav className="site-nav">
           {links.map((link) => (
@@ -39,8 +39,8 @@ export function SiteHeader({ solid = false }: { solid?: boolean }) {
         <div className="header-actions">
           {authed ? (
             <>
-              <Link href="/jobs" className="btn btn-ghost btn-sm">
-                Dashboard
+              <Link href="/profile" className="btn btn-ghost btn-sm">
+                My profile
               </Link>
               <button
                 className="btn btn-primary btn-sm"
@@ -59,7 +59,7 @@ export function SiteHeader({ solid = false }: { solid?: boolean }) {
                 Log in
               </Link>
               <Link href="/signup" className="btn btn-primary btn-sm">
-                Get started
+                Sign up
               </Link>
             </>
           )}
