@@ -32,15 +32,11 @@ export default function LoginPage() {
   return (
     <main>
       <SiteHeader solid />
-      <div className="container grid min-h-[70vh] place-items-center py-12">
-        <form onSubmit={onSubmit} className="surface w-full max-w-md rounded-[24px] p-8">
-          <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold">
-            Welcome back
-          </h1>
-          <p className="mt-2 text-sm text-[var(--ink-soft)]">
-            Log in to score roles and apply in-site.
-          </p>
-          <div className="mt-6 grid gap-4">
+      <div className="container auth-shell">
+        <div className="surface auth-card">
+          <h1>Welcome back</h1>
+          <p>Log in to score roles and apply in-site.</p>
+          <form onSubmit={onSubmit}>
             <div className="field">
               <label htmlFor="email">Email</label>
               <input
@@ -62,18 +58,18 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            {error ? <p className="text-sm text-[var(--warn)]">{error}</p> : null}
-            <button className="btn btn-primary w-full" disabled={loading}>
+            {error ? <p style={{ color: "var(--warn)", margin: 0 }}>{error}</p> : null}
+            <button className="btn btn-primary" disabled={loading}>
               {loading ? "Signing in…" : "Log in"}
             </button>
-          </div>
-          <p className="mt-4 text-sm text-[var(--ink-soft)]">
+          </form>
+          <p style={{ marginTop: "1rem" }}>
             New here?{" "}
-            <Link href="/signup" className="font-semibold text-[var(--accent-deep)]">
+            <Link href="/signup" style={{ color: "var(--accent)", fontWeight: 700 }}>
               Create an account
             </Link>
           </p>
-        </form>
+        </div>
       </div>
     </main>
   );
