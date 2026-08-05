@@ -29,33 +29,31 @@ export default async function JobDetailPage({
   return (
     <main>
       <SiteHeader solid />
-      <article className="container py-10">
-        <p className="badge mb-4">Role</p>
-        <h1 className="max-w-3xl font-[family-name:var(--font-display)] text-4xl font-extrabold tracking-tight md:text-5xl">
+      <article className="container section">
+        <p className="badge">Role</p>
+        <h1 className="page-title" style={{ maxWidth: "40rem", marginTop: "0.75rem" }}>
           {job.title}
         </h1>
-        <p className="mt-3 text-lg font-semibold text-[var(--ink-soft)]">
+        <p className="section-sub" style={{ fontSize: "1.05rem", fontWeight: 600 }}>
           {job.company} · {job.location || "Remote"}
           {job.salary_range ? ` · ${job.salary_range}` : ""}
         </p>
-        <div className="mt-6 flex flex-wrap gap-3">
+        <div className="hero__cta" style={{ marginTop: "1.5rem" }}>
           <Link href={`/jobs/${job.id}/apply`} className="btn btn-primary">
             Apply in-site
           </Link>
-          <a
-            href={job.source_url}
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-ghost"
-          >
+          <a href={job.source_url} target="_blank" rel="noreferrer" className="btn btn-ghost">
             Original listing
           </a>
         </div>
-        <div className="surface mt-8 rounded-[24px] p-6 md:p-8">
-          <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold">
+        <div className="surface" style={{ marginTop: "2rem", borderRadius: 24, padding: "1.75rem" }}>
+          <h2 className="section-title" style={{ fontSize: "1.5rem" }}>
             Description
           </h2>
-          <p className="mt-4 whitespace-pre-wrap text-[15px] leading-7 text-[var(--ink-soft)]">
+          <p
+            className="section-sub"
+            style={{ maxWidth: "none", whiteSpace: "pre-wrap", marginTop: "1rem" }}
+          >
             {job.description}
           </p>
         </div>
