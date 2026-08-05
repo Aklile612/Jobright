@@ -6,7 +6,14 @@ import { api } from "@/lib/api";
 import { isAuthenticated } from "@/lib/auth";
 import type { AutofillData, Job } from "@/lib/types";
 
-type FieldKey = "name" | "email" | "phone" | "linkedin" | "github" | "website" | "coverLetter";
+type FieldKey =
+  | "name"
+  | "email"
+  | "phone"
+  | "linkedin"
+  | "github"
+  | "website"
+  | "coverLetter";
 
 const FIELD_META: { key: FieldKey; label: string; multiline?: boolean }[] = [
   { key: "name", label: "Full name" },
@@ -14,9 +21,15 @@ const FIELD_META: { key: FieldKey; label: string; multiline?: boolean }[] = [
   { key: "phone", label: "Phone" },
   { key: "linkedin", label: "LinkedIn" },
   { key: "github", label: "GitHub" },
-  { key: "website", label: "Portfolio" },
-  { key: "coverLetter", label: "Cover letter / note", multiline: true },
+  { key: "website", label: "Website" },
+  { key: "coverLetter", label: "Cover letter", multiline: true },
 ];
+
+function isUuid(id: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    id,
+  );
+}
 
 export function ApplyWorkspace({ job }: { job: Job }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -24,6 +37,7 @@ export function ApplyWorkspace({ job }: { job: Job }) {
   const [autofill, setAutofill] = useState<AutofillData | null>(null);
   const [status, setStatus] = useState("");
   const [embedMode, setEmbedMode] = useState<"proxy" | "direct">("proxy");
+  const [frameError, setFrameError] = useState(false);
   const [fields, setFields] = useState<Record<FieldKey, string>>({
     name: "",
     email: "",
@@ -41,23 +55,36 @@ export function ApplyWorkspace({ job }: { job: Job }) {
       .autofill()
       .then((data) => {
         setAutofill(data);
-        setFields((prev) => ({
-          ...prev,
+        setFields({
           name: data.name || "",
           email: data.email || "",
-        }));
+          phone: data.phone || "",
+          linkedin: data.linkedin || "",
+          github: data.github || "",
+          website: data.website || "",
+          coverLetter: data.cover_letter || "",
+        });
       })
       .catch(() => undefined);
   }, []);
 
   const frameSrc = useMemo(() => {
     if (!job.source_url) return "";
-    return embedMode === "proxy" ? api.proxyUrl(job.source_url) : job.source_url;
+    if (embedMode === "direct") return job.source_url;
+    return api.proxyUrl(job.source_url);
   }, [job.source_url, embedMode]);
+
+  useEffect(() => {
+    setFrameError(false);
+  }, [frameSrc]);
 
   async function ensureApplication() {
     if (!isAuthenticated()) {
-      setStatus("Log in to track this application and push autofill.");
+      setStatus("Log in to track applications and load your profile.");
+      return null;
+    }
+    if (!isUuid(job.id)) {
+      setStatus("This demo listing isn’t in the database yet. Start the API and sync jobs.");
       return null;
     }
     return api.upsertApplication(job.id, "applied");
@@ -69,23 +96,27 @@ export function ApplyWorkspace({ job }: { job: Job }) {
   }
 
   function pushAutofill() {
+    if (embedMode === "direct") {
+      setStatus("Switch to “In JobRight” mode to autofill inside the page.");
+      return;
+    }
     const frame = iframeRef.current;
     if (!frame?.contentWindow) {
-      setStatus("Application frame not ready");
+      setStatus("Application frame not ready yet.");
       return;
     }
     frame.contentWindow.postMessage(
       { type: "jobright-autofill", payload: fields },
       "*",
     );
-    setStatus("Autofill pushed into the application frame");
+    setStatus("Tried to fill matching fields in the form.");
   }
 
   async function score() {
     try {
       const app = await ensureApplication();
       if (!app) return;
-      setStatus("Scoring with Resume_forge…");
+      setStatus("Scoring…");
       const scored = await api.scoreApplication(app.id);
       setStatus(
         scored.match_score != null
@@ -93,58 +124,46 @@ export function ApplyWorkspace({ job }: { job: Job }) {
           : "Score complete",
       );
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Score failed");
-    }
-  }
-
-  async function forge() {
-    try {
-      const app = await ensureApplication();
-      if (!app) return;
-      setStatus("Forging resume for this role…");
-      const result = await api.forgeApplication(app.id);
-      setStatus(
-        result.application.match_score != null
-          ? `Forged · new score ${result.application.match_score.toFixed(0)}`
-          : "Resume forged",
-      );
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Forge failed");
+      setStatus(err instanceof Error ? err.message : "Score failed — is the API running?");
     }
   }
 
   return (
     <div className="apply-shell">
       <aside className="apply-aside">
-        <Link href={`/jobs/${job.id}`} style={{ color: "var(--accent)", fontWeight: 700, fontSize: "0.9rem" }}>
-          ← {job.title}
+        <Link href={`/jobs/${job.id}`} style={{ color: "var(--muted)", fontWeight: 700, fontSize: "0.85rem" }}>
+          ← Back
         </Link>
         <h1>Apply in-site</h1>
-        <p className="section-sub" style={{ marginTop: "0.4rem" }}>
-          {job.company} · listing opens here with autofill beside it.
+        <p className="section-sub">
+          {job.title} · {job.company}
         </p>
 
         {!authed ? (
-          <div className="surface" style={{ marginTop: "1rem", padding: "0.9rem", borderRadius: 16 }}>
-            <Link href="/login" style={{ color: "var(--accent)", fontWeight: 700 }}>
+          <div className="notice">
+            <Link href="/login" style={{ fontWeight: 700, textDecoration: "underline" }}>
               Log in
             </Link>{" "}
-            to load resume fields and track this application.
+            and set your{" "}
+            <Link href="/profile" style={{ fontWeight: 700, textDecoration: "underline" }}>
+              profile + resume
+            </Link>{" "}
+            so these fields fill automatically.
           </div>
         ) : null}
 
-        <div style={{ display: "grid", gap: "0.8rem", marginTop: "1.2rem" }}>
+        <div style={{ display: "grid", gap: "0.7rem", marginTop: "1rem" }}>
           {FIELD_META.map((field) => (
             <div key={field.key} className="field">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <label htmlFor={field.key}>{field.label}</label>
                 <button
                   type="button"
                   onClick={() => copyField(field.key)}
                   style={{
-                    background: "none",
                     border: 0,
-                    color: "var(--accent)",
+                    background: "none",
+                    color: "var(--muted)",
                     fontWeight: 700,
                     fontSize: "0.75rem",
                     cursor: "pointer",
@@ -156,7 +175,7 @@ export function ApplyWorkspace({ job }: { job: Job }) {
               {field.multiline ? (
                 <textarea
                   id={field.key}
-                  rows={4}
+                  rows={3}
                   value={fields[field.key]}
                   onChange={(e) =>
                     setFields((prev) => ({ ...prev, [field.key]: e.target.value }))
@@ -175,27 +194,24 @@ export function ApplyWorkspace({ job }: { job: Job }) {
           ))}
         </div>
 
-        <div className="surface" style={{ marginTop: "1rem", padding: "0.9rem", borderRadius: 16 }}>
-          <p style={{ margin: 0, fontWeight: 700 }}>Resume</p>
-          <p className="section-sub" style={{ marginTop: "0.35rem" }}>
-            {autofill?.has_resume
-              ? autofill.resume_file_name || autofill.resume_name
-              : "No resume uploaded yet"}
-          </p>
-          <Link href="/resumes" style={{ color: "var(--accent)", fontWeight: 700, fontSize: "0.9rem" }}>
-            Manage resumes
-          </Link>
+        <div className="notice">
+          Resume:{" "}
+          {autofill?.has_resume
+            ? autofill.resume_file_name || autofill.resume_name
+            : "none — upload on Profile"}
+          <div style={{ marginTop: "0.45rem" }}>
+            <Link href="/profile" style={{ fontWeight: 700, textDecoration: "underline" }}>
+              Edit profile & resume
+            </Link>
+          </div>
         </div>
 
-        <div style={{ display: "grid", gap: "0.55rem", marginTop: "1rem" }}>
+        <div style={{ display: "grid", gap: "0.45rem", marginTop: "0.85rem" }}>
           <button type="button" className="btn btn-primary" onClick={pushAutofill}>
-            Fill application form
+            Autofill form
           </button>
           <button type="button" className="btn btn-ghost" onClick={score}>
             Get ATS score
-          </button>
-          <button type="button" className="btn btn-ghost" onClick={forge}>
-            Forge resume for this job
           </button>
         </div>
 
@@ -205,29 +221,38 @@ export function ApplyWorkspace({ job }: { job: Job }) {
             className={embedMode === "proxy" ? "is-on" : ""}
             onClick={() => setEmbedMode("proxy")}
           >
-            Proxied embed
+            In JobRight
           </button>
           <button
             type="button"
             className={embedMode === "direct" ? "is-on" : ""}
             onClick={() => setEmbedMode("direct")}
           >
-            Direct URL
+            Direct site
           </button>
         </div>
+
+        {frameError ? (
+          <div className="notice">
+            This board blocked embedding. Use <strong>Copy</strong> on fields, or open the
+            original listing.
+          </div>
+        ) : null}
 
         {status ? <p className="status-pill">{status}</p> : null}
       </aside>
 
       <section className="apply-frame">
         <div className="apply-frame__bar">
-          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            <span className="badge" style={{ marginRight: "0.5rem" }}>
-              Live
-            </span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {job.source_url}
-          </div>
-          <a href={job.source_url} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", fontWeight: 700 }}>
+          </span>
+          <a
+            href={job.source_url}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontWeight: 700, color: "var(--text)", flexShrink: 0 }}
+          >
             Open original
           </a>
         </div>
@@ -237,13 +262,15 @@ export function ApplyWorkspace({ job }: { job: Job }) {
             title={`Apply · ${job.title}`}
             src={frameSrc}
             sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            onError={() => setFrameError(true)}
           />
         ) : (
           <div style={{ display: "grid", placeItems: "center", color: "var(--muted)", flex: 1 }}>
-            No application URL for this role
+            No application URL
           </div>
         )}
       </section>
     </div>
   );
 }
+
