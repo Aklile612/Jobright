@@ -2,7 +2,17 @@
 
 Monorepo: Next.js frontend + Go API + Resume_forge (external) for ATS/CV forging.
 
-## Backend
+## Frontend
+
+```bash
+cd apps/web && npm run dev
+```
+
+Open http://localhost:3000
+
+- Home lists software roles (syncs Remotive + Arbeitnow + RemoteOK via Go).
+- **Apply in-site** opens the job URL inside JobRight with an autofill side panel (no Chrome extension).
+- Upload resumes, score / forge via Resume_forge through the Go API.
 
 ```bash
 # Postgres
