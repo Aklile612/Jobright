@@ -51,16 +51,18 @@ export default function ResumesPage() {
   return (
     <main>
       <SiteHeader solid />
-      <div className="container py-10">
-        <h1 className="font-[family-name:var(--font-display)] text-4xl font-extrabold">
-          Resumes
-        </h1>
-        <p className="mt-2 max-w-2xl text-[var(--ink-soft)]">
+      <div className="container section">
+        <h1 className="page-title">Resumes</h1>
+        <p className="section-sub">
           Upload once. JobRight stores the file and syncs it to Resume_forge for
           scoring and forging when you apply.
         </p>
 
-        <form onSubmit={onUpload} className="surface mt-8 grid max-w-xl gap-4 rounded-[24px] p-6">
+        <form
+          onSubmit={onUpload}
+          className="surface"
+          style={{ marginTop: "2rem", maxWidth: 520, borderRadius: 24, padding: "1.5rem", display: "grid", gap: "1rem" }}
+        >
           <div className="field">
             <label htmlFor="name">Display name</label>
             <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -74,24 +76,35 @@ export default function ResumesPage() {
               onChange={(e) => setFile(e.target.files?.[0] || null)}
             />
           </div>
-          {error ? <p className="text-sm text-[var(--warn)]">{error}</p> : null}
+          {error ? <p style={{ color: "var(--warn)", margin: 0 }}>{error}</p> : null}
           <button className="btn btn-primary" disabled={loading}>
             {loading ? "Uploading…" : "Upload resume"}
           </button>
         </form>
 
-        <div className="mt-8 grid gap-3">
+        <div style={{ display: "grid", gap: "0.75rem", marginTop: "1.75rem" }}>
           {resumes.map((resume) => (
             <div
               key={resume.id}
-              className="surface flex flex-wrap items-center justify-between gap-3 rounded-[18px] p-4"
+              className="surface"
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "space-between",
+                gap: "0.75rem",
+                alignItems: "center",
+                borderRadius: 18,
+                padding: "1rem",
+              }}
             >
               <div>
-                <p className="font-bold">{resume.name}</p>
-                <p className="text-sm text-[var(--ink-soft)]">{resume.file_name}</p>
+                <p style={{ margin: 0, fontWeight: 700 }}>{resume.name}</p>
+                <p className="section-sub" style={{ marginTop: "0.25rem" }}>
+                  {resume.file_name}
+                </p>
               </div>
               <button
-                className="btn btn-ghost text-sm"
+                className="btn btn-ghost btn-sm"
                 onClick={async () => {
                   await api.deleteResume(resume.id);
                   await refresh();
@@ -101,12 +114,10 @@ export default function ResumesPage() {
               </button>
             </div>
           ))}
-          {resumes.length === 0 ? (
-            <p className="text-[var(--ink-soft)]">No resumes yet.</p>
-          ) : null}
+          {resumes.length === 0 ? <p className="section-sub">No resumes yet.</p> : null}
         </div>
 
-        <Link href="/jobs" className="btn btn-ghost mt-8 inline-flex">
+        <Link href="/jobs" className="btn btn-ghost" style={{ marginTop: "2rem" }}>
           Browse jobs
         </Link>
       </div>
