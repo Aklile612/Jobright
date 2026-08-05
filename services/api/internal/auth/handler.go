@@ -40,6 +40,8 @@ type userResponse struct {
 	Website         string     `json:"website"`
 	Location        string     `json:"location"`
 	Headline        string     `json:"headline"`
+	Skills          string     `json:"skills"`
+	Education       string     `json:"education"`
 	CoverLetter     string     `json:"cover_letter"`
 	CurrentResumeID *uuid.UUID `json:"current_resume_id,omitempty"`
 }
@@ -96,6 +98,8 @@ func toUser(u *models.User) userResponse {
 		Website:         u.Website,
 		Location:        u.Location,
 		Headline:        u.Headline,
+		Skills:          u.Skills,
+		Education:       u.Education,
 		CoverLetter:     u.CoverLetter,
 		CurrentResumeID: u.CurrentResumeID,
 	}
