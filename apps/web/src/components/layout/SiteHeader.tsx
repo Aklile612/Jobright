@@ -20,40 +20,30 @@ export function SiteHeader({ solid = false }: { solid?: boolean }) {
   }, [pathname]);
 
   return (
-    <header
-      className={`sticky top-0 z-40 border-b ${
-        solid
-          ? "border-[var(--line)] bg-[rgba(247,250,248,0.92)] backdrop-blur-md"
-          : "border-transparent bg-transparent"
-      }`}
-    >
-      <div className="container flex items-center justify-between py-4">
-        <Link href="/" className="font-[family-name:var(--font-display)] text-2xl font-extrabold tracking-tight">
-          Job<span className="text-[var(--accent)]">Right</span>
+    <header className={`site-header ${solid ? "is-solid" : ""}`}>
+      <div className="container site-header__inner">
+        <Link href="/" className="brand">
+          Job<span>Right</span>
         </Link>
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="site-nav">
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className={`text-sm font-semibold transition ${
-                pathname?.startsWith(link.href)
-                  ? "text-[var(--accent-deep)]"
-                  : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
-              }`}
+              className={pathname?.startsWith(link.href) ? "is-active" : ""}
             >
               {link.label}
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
+        <div className="header-actions">
           {authed ? (
             <>
-              <Link href="/jobs" className="btn btn-ghost text-sm">
+              <Link href="/jobs" className="btn btn-ghost btn-sm">
                 Dashboard
               </Link>
               <button
-                className="btn btn-primary text-sm"
+                className="btn btn-primary btn-sm"
                 onClick={() => {
                   clearToken();
                   setAuthed(false);
@@ -65,10 +55,10 @@ export function SiteHeader({ solid = false }: { solid?: boolean }) {
             </>
           ) : (
             <>
-              <Link href="/login" className="btn btn-ghost text-sm">
+              <Link href="/login" className="btn btn-ghost btn-sm">
                 Log in
               </Link>
-              <Link href="/signup" className="btn btn-primary text-sm">
+              <Link href="/signup" className="btn btn-primary btn-sm">
                 Get started
               </Link>
             </>
