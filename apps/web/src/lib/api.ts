@@ -72,11 +72,15 @@ export const api = {
       { method: "POST" },
     ),
   listResumes: () => request<Resume[]>("/api/v1/resumes", {}, true),
-  uploadResume: (file: File, name: string) => {
+  uploadResume: async (file: File, name: string) => {
     const form = new FormData();
     form.append("file", file);
     form.append("name", name);
-    return request<Resume>("/api/v1/resumes", { method: "POST", body: form }, true);
+    return request<{ resume: Resume; profile: User }>(
+      "/api/v1/resumes",
+      { method: "POST", body: form },
+      true,
+    );
   },
   deleteResume: (id: string) =>
     request<void>(`/api/v1/resumes/${id}`, { method: "DELETE" }, true),
