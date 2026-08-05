@@ -27,6 +27,8 @@ type autofillResponse struct {
 	Website      string `json:"website"`
 	Location     string `json:"location"`
 	Headline     string `json:"headline"`
+	Skills       string `json:"skills"`
+	Education    string `json:"education"`
 	CoverLetter  string `json:"cover_letter"`
 	ResumeID     string `json:"resume_id,omitempty"`
 	ResumeName   string `json:"resume_name,omitempty"`
@@ -51,6 +53,8 @@ func (h *Handler) AutofillData(c *gin.Context) {
 		Website:     user.Website,
 		Location:    user.Location,
 		Headline:    user.Headline,
+		Skills:      user.Skills,
+		Education:   user.Education,
 		CoverLetter: user.CoverLetter,
 	}
 	if user.CurrentResumeID != nil {
