@@ -3,7 +3,9 @@ import type {
   Application,
   AuthResponse,
   AutofillData,
+  AnalyzeResult,
   Job,
+  PrepareResult,
   Resume,
   User,
 } from "./types";
@@ -110,15 +112,60 @@ export const api = {
     tone?: "professional" | "concise" | "enthusiastic";
     extra?: string;
   }) =>
-    request<{ cover_letter: string; tone: string }>(
+    request<{ cover_letter: string; tone: string; model?: string }>(
       "/api/v1/ai/cover-letter",
       { method: "POST", body: JSON.stringify(body) },
       true,
     ),
+  analyzeJob: (body: {
+    job_id?: string;
+    title?: string;
+    company?: string;
+    description?: string;
+  }) =>
+    request<AnalyzeResult>("/api/v1/ai/analyze", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }, true),
+  prepareApplication: (body: {
+    job_id?: string;
+    title?: string;
+    company?: string;
+    description?: string;
+    tone?: "professional" | "concise" | "enthusiastic";
+    extra?: string;
+  }) =>
+    request<PrepareResult>("/api/v1/ai/prepare", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }, true),
+  aiStatus: () =>
+    request<{ enabled: boolean; provider: string; model: string }>(
+      "/api/v1/ai/status",
+      {},
+      true,
+    ),
   autofill: () => request<AutofillData>("/api/v1/ext/autofill-data", {}, true),
-  /** Same-origin Next proxy — does not need Go API running */
-  proxyUrl: (target: string) =>
-    `/api/proxy?url=${encodeURIComponent(target)}`,
+  /** Same-origin Next proxy — always unwrap nested / mistaken proxy URLs first */
+  proxyUrl: (target: string) => {
+    let url = target;
+    for (let i = 0; i < 5; i++) {
+      try {
+        const u = new URL(url, "http://localhost:3000");
+        if (u.pathname.includes("/api/proxy")) {
+          const inner = u.searchParams.get("url");
+          if (inner) {
+            url = inner;
+            continue;
+          }
+        }
+      } catch {
+        /* keep */
+      }
+      break;
+    }
+    return `/api/proxy?url=${encodeURIComponent(url)}`;
+  },
 };
 
 export { API_URL };
