@@ -3,65 +3,114 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jobright/api/internal/atsscore"
 	"github.com/jobright/api/internal/auth"
+	"github.com/jobright/api/internal/gemini"
 	"github.com/jobright/api/internal/groq"
 	"github.com/jobright/api/internal/middleware"
 	"github.com/jobright/api/internal/models"
+	"github.com/jobright/api/internal/pdfstamp"
 	"github.com/jobright/api/pkg/response"
 	"gorm.io/gorm"
 )
 
 type Handler struct {
-	db   *gorm.DB
-	auth *auth.Service
-	ai   *groq.Client
+	db         *gorm.DB
+	auth       *auth.Service
+	gemini     *gemini.Client
+	groq       *groq.Client
+	uploadDir  string
+	pythonBin  string
+	stampScript string
 }
 
-func NewHandler(db *gorm.DB, authSvc *auth.Service, aiClient *groq.Client) *Handler {
-	return &Handler{db: db, auth: authSvc, ai: aiClient}
+func NewHandler(db *gorm.DB, authSvc *auth.Service, geminiClient *gemini.Client, groqClient *groq.Client, uploadDir string) *Handler {
+	h := &Handler{
+		db:        db,
+		auth:      authSvc,
+		gemini:    geminiClient,
+		groq:      groqClient,
+		uploadDir: uploadDir,
+	}
+	h.pythonBin, h.stampScript = resolveStampTools()
+	return h
 }
 
 type jobContextRequest struct {
-	JobID       string `json:"job_id"`
-	Title       string `json:"title"`
-	Company     string `json:"company"`
-	Description string `json:"description"`
-	Tone        string `json:"tone"`
-	Extra       string `json:"extra"`
+	JobID           string   `json:"job_id"`
+	Title           string   `json:"title"`
+	Company         string   `json:"company"`
+	Description     string   `json:"description"`
+	Tone            string   `json:"tone"`
+	Extra           string   `json:"extra"`
+	MissingKeywords []string `json:"missing_keywords"`
+	MissingSkills   []string `json:"missing_skills"`
+	Suggestions     []string `json:"suggestions"`
 }
 
 type analyzeResult struct {
-	MatchScore       float64  `json:"match_score"`
-	MissingKeywords  []string `json:"missing_keywords"`
-	MissingSkills    []string `json:"missing_skills"`
-	Strengths        []string `json:"strengths"`
-	Suggestions      []string `json:"suggestions"`
-	Summary          string   `json:"summary"`
-	Model            string   `json:"model"`
-}
-
-type tailorResult struct {
-	Headline        string   `json:"headline"`
+	MatchScore      float64  `json:"match_score"`
+	MissingKeywords []string `json:"missing_keywords"`
+	MissingSkills   []string `json:"missing_skills"`
+	Strengths       []string `json:"strengths"`
+	Suggestions     []string `json:"suggestions"`
 	Summary         string   `json:"summary"`
-	Skills          []string `json:"skills"`
-	ExperienceBullets []string `json:"experience_bullets"`
-	Education       string   `json:"education"`
-	ResumeMarkdown  string   `json:"resume_markdown"`
-	CoverLetter     string   `json:"cover_letter"`
-	Analyze         analyzeResult `json:"analyze"`
+	Covered         int      `json:"covered,omitempty"`
+	TotalKeywords   int      `json:"total_keywords,omitempty"`
 	Model           string   `json:"model"`
 }
 
-func (h *Handler) requireAI(c *gin.Context) bool {
-	if h.ai == nil || !h.ai.Enabled() {
-		response.BadRequest(c, "AI is not configured (set GROQ_API_KEY)")
+type tailorResult struct {
+	Headline         string        `json:"headline"`
+	Summary          string        `json:"summary"`
+	Skills           []string      `json:"skills"`
+	ResumeMarkdown   string        `json:"resume_markdown"`
+	CoverLetter      string        `json:"cover_letter"`
+	Analyze          analyzeResult `json:"analyze"`
+	Model            string        `json:"model"`
+	OriginalResumeID string        `json:"original_resume_id,omitempty"`
+	TailoredFileID   string        `json:"tailored_file_id,omitempty"`
+	DownloadPath     string        `json:"download_path,omitempty"`
+	KeywordsAdded    []string      `json:"keywords_added"`
+	ChangesSummary   string        `json:"changes_summary"`
+}
+
+func (h *Handler) anyAI() bool {
+	return (h.gemini != nil && h.gemini.Enabled()) || (h.groq != nil && h.groq.Enabled())
+}
+
+func (h *Handler) requireAnyAI(c *gin.Context) bool {
+	if !h.anyAI() {
+		response.BadRequest(c, "AI is not configured (set GEMINI_API_KEY and/or GROQ_API_KEY)")
 		return false
 	}
 	return true
+}
+
+func (h *Handler) chatSmall(system, user string, maxTokens int) (string, string, error) {
+	if h.gemini != nil && h.gemini.Enabled() {
+		text, err := h.gemini.Chat(system, user, maxTokens)
+		if err == nil {
+			return text, "gemini/" + h.gemini.Model(), nil
+		}
+		if h.groq == nil || !h.groq.Enabled() {
+			return "", "", err
+		}
+	}
+	if h.groq != nil && h.groq.Enabled() {
+		text, err := h.groq.Chat(system, user, maxTokens)
+		if err != nil {
+			return "", "", err
+		}
+		return text, "groq/" + h.groq.Model(), nil
+	}
+	return "", "", fmt.Errorf("no AI provider configured")
 }
 
 func (h *Handler) loadJobAndUser(c *gin.Context, req *jobContextRequest) (*models.User, string, string, string, bool) {
@@ -96,7 +145,23 @@ func (h *Handler) loadJobAndUser(c *gin.Context, req *jobContextRequest) (*model
 	return user, title, company, description, true
 }
 
-func profileBlob(user *models.User) string {
+func (h *Handler) latestResume(userID uuid.UUID) (*models.Resume, error) {
+	var resume models.Resume
+	if err := h.db.Where("user_id = ?", userID).Order("created_at desc").First(&resume).Error; err != nil {
+		return nil, err
+	}
+	return &resume, nil
+}
+
+func (h *Handler) latestResumeText(userID uuid.UUID) string {
+	resume, err := h.latestResume(userID)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(resume.ParsedText)
+}
+
+func profileBlob(user *models.User, resumeText string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Name: %s\n", user.Name)
 	if user.Headline != "" {
@@ -109,10 +174,7 @@ func profileBlob(user *models.User) string {
 		fmt.Fprintf(&b, "Skills: %s\n", user.Skills)
 	}
 	if user.Education != "" {
-		fmt.Fprintf(&b, "Education:\n%s\n", trim(user.Education, 1200))
-	}
-	if user.CoverLetter != "" {
-		fmt.Fprintf(&b, "Experience / summary notes:\n%s\n", trim(user.CoverLetter, 2500))
+		fmt.Fprintf(&b, "Education:\n%s\n", trim(user.Education, 1000))
 	}
 	if user.LinkedIn != "" {
 		fmt.Fprintf(&b, "LinkedIn: %s\n", user.LinkedIn)
@@ -127,13 +189,13 @@ func profileBlob(user *models.User) string {
 		fmt.Fprintf(&b, "Phone: %s\n", user.Phone)
 	}
 	fmt.Fprintf(&b, "Email: %s\n", user.Email)
+	if resumeText != "" {
+		fmt.Fprintf(&b, "\n--- UPLOADED RESUME TEXT ---\n%s\n", trim(resumeText, 5500))
+	}
 	return b.String()
 }
 
 func (h *Handler) Analyze(c *gin.Context) {
-	if !h.requireAI(c) {
-		return
-	}
 	var req jobContextRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid payload")
@@ -152,36 +214,65 @@ func (h *Handler) Analyze(c *gin.Context) {
 }
 
 func (h *Handler) runAnalyze(user *models.User, title, company, description string) (*analyzeResult, error) {
-	system := `You are an ATS resume analyst. Compare the candidate profile to the job.
-Return ONLY valid JSON with this shape:
-{"match_score":0-100,"missing_keywords":[],"missing_skills":[],"strengths":[],"suggestions":[],"summary":""}
-Do not invent degrees or employers the candidate did not list.
-Keep arrays to at most 8 items. summary max 2 sentences.`
-	userPrompt := fmt.Sprintf("CANDIDATE PROFILE:\n%s\n\nJOB:\nTitle: %s\nCompany: %s\nDescription:\n%s",
-		profileBlob(user), title, company, trim(description, 5000))
-	raw, err := h.ai.Chat(system, userPrompt, 1200)
-	if err != nil {
-		return nil, err
+	resumeText := h.latestResumeText(user.ID)
+	if resumeText == "" {
+		resumeText = profileBlob(user, "")
 	}
-	raw = stripJSONFence(raw)
-	var out analyzeResult
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return nil, fmt.Errorf("failed to parse ATS analysis: %w", err)
+	base := atsscore.Score(resumeText+"\n"+user.Skills+"\n"+user.Headline, title, description)
+
+	out := &analyzeResult{
+		MatchScore:      base.MatchScore,
+		MissingKeywords: base.MissingKeywords,
+		MissingSkills:   base.MissingSkills,
+		Strengths:       base.Present,
+		Covered:         base.Covered,
+		TotalKeywords:   base.Total,
+		Model:           "keyword-coverage",
+		Summary: fmt.Sprintf(
+			"Keyword coverage %d/%d (%.0f%%). Score is based on how many job keywords appear in your uploaded resume — not a model guess.",
+			base.Covered, base.Total, base.MatchScore,
+		),
+		Suggestions: []string{
+			"Keep your 1-page PDF layout; we stamp missing keywords onto your original file when you tailor.",
+			"Only claim keywords you can defend in interviews.",
+		},
 	}
-	out.Model = h.ai.Model()
-	if out.MatchScore < 0 {
-		out.MatchScore = 0
+
+	// Optional AI narrative on top of deterministic gaps (does not override score).
+	if h.anyAI() {
+		system := `You advise on ATS gaps. Return ONLY JSON:
+{"suggestions":[],"summary":"","strengths_note":""}
+Use the provided coverage numbers. Do not invent a new match_score. Max 5 suggestions.`
+		userPrompt := fmt.Sprintf(
+			"Role: %s at %s\nCoverage: %d/%d = %.1f%%\nPresent: %s\nMissing skills: %s\nMissing keywords: %s\n\nResume excerpt:\n%s",
+			title, company, base.Covered, base.Total, base.MatchScore,
+			strings.Join(base.Present, ", "),
+			strings.Join(base.MissingSkills, ", "),
+			strings.Join(base.MissingKeywords, ", "),
+			trim(resumeText, 1800),
+		)
+		raw, model, err := h.chatSmall(system, userPrompt, 450)
+		if err == nil {
+			var narr struct {
+				Suggestions   []string `json:"suggestions"`
+				Summary       string   `json:"summary"`
+				StrengthsNote string   `json:"strengths_note"`
+			}
+			if json.Unmarshal([]byte(extractJSONObject(raw)), &narr) == nil {
+				if narr.Summary != "" {
+					out.Summary = narr.Summary + fmt.Sprintf(" (coverage %.0f%% · %d/%d keywords)", base.MatchScore, base.Covered, base.Total)
+				}
+				if len(narr.Suggestions) > 0 {
+					out.Suggestions = narr.Suggestions
+				}
+				out.Model = "keyword-coverage+" + model
+			}
+		}
 	}
-	if out.MatchScore > 100 {
-		out.MatchScore = 100
-	}
-	return &out, nil
+	return out, nil
 }
 
-func (h *Handler) Prepare(c *gin.Context) {
-	if !h.requireAI(c) {
-		return
-	}
+func (h *Handler) Tailor(c *gin.Context) {
 	var req jobContextRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid payload")
@@ -192,69 +283,183 @@ func (h *Handler) Prepare(c *gin.Context) {
 		return
 	}
 
+	analyze := analyzeResult{
+		MissingKeywords: req.MissingKeywords,
+		MissingSkills:   req.MissingSkills,
+		Suggestions:     req.Suggestions,
+	}
+	if len(analyze.MissingKeywords) == 0 && len(analyze.MissingSkills) == 0 {
+		a, err := h.runAnalyze(user, title, company, description)
+		if err != nil {
+			response.Internal(c, err.Error())
+			return
+		}
+		analyze = *a
+	} else {
+		// Recompute authoritative score even if client sent gaps.
+		a, err := h.runAnalyze(user, title, company, description)
+		if err == nil {
+			analyze.MatchScore = a.MatchScore
+			analyze.Strengths = a.Strengths
+			analyze.Covered = a.Covered
+			analyze.TotalKeywords = a.TotalKeywords
+			analyze.Summary = a.Summary
+			analyze.Model = a.Model
+			if len(analyze.Suggestions) == 0 {
+				analyze.Suggestions = a.Suggestions
+			}
+		}
+	}
+
+	out, err := h.runTailor(user, title, company, description, req.Tone, req.Extra, &analyze)
+	if err != nil {
+		response.Internal(c, err.Error())
+		return
+	}
+	response.OK(c, out)
+}
+
+func (h *Handler) Prepare(c *gin.Context) {
+	var req jobContextRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid payload")
+		return
+	}
+	user, title, company, description, ok := h.loadJobAndUser(c, &req)
+	if !ok {
+		return
+	}
 	analyze, err := h.runAnalyze(user, title, company, description)
 	if err != nil {
 		response.Internal(c, err.Error())
 		return
 	}
-
-	tone := strings.ToLower(strings.TrimSpace(req.Tone))
-	if tone != "concise" && tone != "enthusiastic" {
-		tone = "professional"
-	}
-
-	system := `You tailor an existing resume for one job. Do NOT invent fake employers, degrees, or dates.
-Only weave in missing keywords/skills honestly from the candidate's real background (rephrase experience, add skill terms they plausibly have).
-Return ONLY valid JSON:
-{"headline":"","summary":"","skills":[],"experience_bullets":[],"education":"","resume_markdown":"","cover_letter":""}
-- skills: merged list (existing + relevant missing terms), max 25
-- experience_bullets: 4-8 bullets grounded in their notes
-- resume_markdown: full plain resume in markdown they can copy
-- cover_letter: under 280 words, ` + tone + ` tone, no markdown fences`
-
-	userPrompt := fmt.Sprintf(`CANDIDATE PROFILE:
-%s
-
-ATS GAPS:
-missing_skills=%s
-missing_keywords=%s
-suggestions=%s
-
-TARGET JOB:
-Title: %s
-Company: %s
-Description:
-%s
-%s`,
-		profileBlob(user),
-		strings.Join(analyze.MissingSkills, ", "),
-		strings.Join(analyze.MissingKeywords, ", "),
-		strings.Join(analyze.Suggestions, "; "),
-		title, company, trim(description, 4500),
-		extraLine(req.Extra),
-	)
-
-	raw, err := h.ai.Chat(system, userPrompt, 3500)
+	out, err := h.runTailor(user, title, company, description, req.Tone, req.Extra, analyze)
 	if err != nil {
 		response.Internal(c, err.Error())
 		return
 	}
-	raw = stripJSONFence(raw)
-	var tailored tailorResult
-	if err := json.Unmarshal([]byte(raw), &tailored); err != nil {
-		response.Internal(c, "failed to parse tailored resume: "+err.Error())
+	response.OK(c, out)
+}
+
+func (h *Handler) runTailor(user *models.User, title, company, description, tone, extra string, analyze *analyzeResult) (*tailorResult, error) {
+	tone = strings.ToLower(strings.TrimSpace(tone))
+	if tone != "concise" && tone != "enthusiastic" {
+		tone = "professional"
+	}
+
+	resume, err := h.latestResume(user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("upload a resume PDF on Profile first")
+	}
+	if !strings.EqualFold(filepath.Ext(resume.FilePath), ".pdf") && !strings.Contains(strings.ToLower(resume.ContentType), "pdf") {
+		return nil, fmt.Errorf("tailoring needs a PDF resume — re-upload as PDF")
+	}
+	if _, err := os.Stat(resume.FilePath); err != nil {
+		return nil, fmt.Errorf("original resume file missing on disk")
+	}
+
+	// Ask AI which missing keywords can honestly be stamped (short list). No full rewrite.
+	candidates := append([]string{}, analyze.MissingSkills...)
+	candidates = append(candidates, analyze.MissingKeywords...)
+	keywords := pickHonestKeywords(candidates, 8)
+	if h.anyAI() && len(candidates) > 0 {
+		system := `Pick keywords from the candidate list that honestly fit this resume. Return ONLY JSON:
+{"keywords_to_add":[],"note":""}
+Max 8 keywords. Never invent employers or degrees. Prefer skills already implied by the resume.`
+		userPrompt := fmt.Sprintf("CANDIDATES: %s\n\nRESUME:\n%s\n\nJOB: %s at %s\n%s",
+			strings.Join(candidates, ", "),
+			trim(resume.ParsedText, 3500),
+			title, company, trim(description, 800),
+		)
+		raw, _, err := h.chatSmall(system, userPrompt, 300)
+		if err == nil {
+			var pick struct {
+				Keywords []string `json:"keywords_to_add"`
+			}
+			if json.Unmarshal([]byte(extractJSONObject(raw)), &pick) == nil && len(pick.Keywords) > 0 {
+				keywords = pickHonestKeywords(pick.Keywords, 8)
+			}
+		}
+	}
+
+	fileID := uuid.New().String()
+	outDir := filepath.Join(h.uploadDir, "tailored", user.ID.String())
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return nil, err
+	}
+	dst := filepath.Join(outDir, fileID+".pdf")
+	stampTitle := fmt.Sprintf("%s @ %s", title, company)
+	if err := pdfstamp.Stamp(h.pythonBin, h.stampScript, resume.FilePath, dst, stampTitle, keywords); err != nil {
+		return nil, fmt.Errorf("could not update PDF: %w", err)
+	}
+
+	coverLetter := ""
+	model := "pdf-stamp"
+	if h.anyAI() {
+		coverSystem := `Write a job application cover letter. Return ONLY the letter body — no markdown fences. Under 180 words.`
+		coverPrompt := fmt.Sprintf("Tone: %s\nName: %s\nRole: %s at %s\nKeywords emphasized: %s\nJD:\n%s\n%s",
+			tone, user.Name, title, company, strings.Join(keywords, ", "), trim(description, 1400), extraLine(extra))
+		letter, m, err := h.chatSmall(coverSystem, coverPrompt, 450)
+		if err == nil {
+			coverLetter = cleanPlainResume(letter)
+			model = m + "+pdf-stamp"
+			_ = h.db.Model(&models.User{}).Where("id = ?", user.ID).Update("cover_letter", coverLetter).Error
+		}
+	}
+
+	summary := fmt.Sprintf(
+		"Kept your original 1-page PDF and stamped %d ATS keywords onto it for %s.",
+		len(keywords), stampTitle,
+	)
+	preview := summary + "\n\nKeywords added:\n- " + strings.Join(keywords, "\n- ")
+	if len(keywords) == 0 {
+		preview = summary + "\n\nNo extra keywords to stamp — your resume already covers the main terms."
+	}
+
+	return &tailorResult{
+		Headline:         firstNonEmpty(user.Headline, title),
+		Summary:          summary,
+		Skills:           keywords,
+		ResumeMarkdown:   preview,
+		CoverLetter:      coverLetter,
+		Analyze:          *analyze,
+		Model:            model,
+		OriginalResumeID: resume.ID.String(),
+		TailoredFileID:   fileID,
+		DownloadPath:     "/api/v1/ai/tailored/" + fileID + "/file",
+		KeywordsAdded:    keywords,
+		ChangesSummary:   summary,
+	}, nil
+}
+
+func (h *Handler) DownloadTailored(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" || strings.Contains(id, "..") || strings.Contains(id, "/") {
+		response.BadRequest(c, "invalid file id")
 		return
 	}
-	tailored.Analyze = *analyze
-	tailored.Model = h.ai.Model()
-	if tailored.CoverLetter != "" {
-		_ = h.db.Model(&models.User{}).Where("id = ?", user.ID).Update("cover_letter", tailored.CoverLetter).Error
+	userID := middleware.UserID(c)
+	path := filepath.Join(h.uploadDir, "tailored", userID.String(), id+".pdf")
+	if _, err := os.Stat(path); err != nil {
+		response.NotFound(c, "tailored PDF not found")
+		return
 	}
-	response.OK(c, tailored)
+	c.FileAttachment(path, "tailored-resume.pdf")
+}
+
+func (h *Handler) DownloadOriginal(c *gin.Context) {
+	userID := middleware.UserID(c)
+	resume, err := h.latestResume(userID)
+	if err != nil {
+		response.NotFound(c, "resume not found")
+		return
+	}
+	c.FileAttachment(resume.FilePath, resume.FileName)
 }
 
 func (h *Handler) CoverLetter(c *gin.Context) {
-	if !h.requireAI(c) {
+	if !h.requireAnyAI(c) {
 		return
 	}
 	var req jobContextRequest
@@ -270,43 +475,193 @@ func (h *Handler) CoverLetter(c *gin.Context) {
 	if tone != "concise" && tone != "enthusiastic" {
 		tone = "professional"
 	}
-	system := `Write a job application cover letter. Return ONLY the letter body — no markdown, no title.`
+	resumeText := h.latestResumeText(user.ID)
+	system := `Write a job application cover letter. Return ONLY the letter body — no markdown fences, no title. Under 180 words.`
 	userPrompt := fmt.Sprintf("Tone: %s\n\nCandidate:\n%s\n\nRole: %s at %s\nJD:\n%s\n%s",
-		tone, profileBlob(user), title, company, trim(description, 4000), extraLine(req.Extra))
-	letter, err := h.ai.Chat(system, userPrompt, 900)
+		tone, profileBlob(user, resumeText), title, company, trim(description, 1800), extraLine(req.Extra))
+	letter, model, err := h.chatSmall(system, userPrompt, 450)
 	if err != nil {
 		response.Internal(c, err.Error())
 		return
 	}
+	letter = cleanPlainResume(letter)
 	_ = h.db.Model(&models.User{}).Where("id = ?", user.ID).Update("cover_letter", letter).Error
-	response.OK(c, gin.H{"cover_letter": letter, "tone": tone, "model": h.ai.Model()})
+	response.OK(c, gin.H{"cover_letter": letter, "tone": tone, "model": model})
 }
 
 func (h *Handler) Status(c *gin.Context) {
-	enabled := h.ai != nil && h.ai.Enabled()
-	model := ""
-	if enabled {
-		model = h.ai.Model()
+	geminiOn := h.gemini != nil && h.gemini.Enabled()
+	groqOn := h.groq != nil && h.groq.Enabled()
+	geminiModel := ""
+	groqModel := ""
+	if geminiOn {
+		geminiModel = h.gemini.Model()
+	}
+	if groqOn {
+		groqModel = h.groq.Model()
 	}
 	response.OK(c, gin.H{
-		"enabled": enabled,
-		"provider": "groq",
-		"model": model,
-		"recommended": gin.H{
-			"volume":  "llama-3.1-8b-instant",
-			"quality": "llama-3.3-70b-versatile",
-			"note":    "instant ≈ 14.4k req/day + 500k tokens/day on free tier; 70b ≈ 1k req/day + 100k tokens/day",
+		"enabled": geminiOn || groqOn,
+		"routing": gin.H{
+			"ats_score":     "deterministic keyword coverage (+ optional AI notes)",
+			"resume_tailor": "stamp keywords onto original PDF (keeps 1 page)",
+			"cover_letter":  "gemini (fallback groq)",
 		},
+		"pdf_stamp": gin.H{
+			"python": h.pythonBin,
+			"script": h.stampScript,
+		},
+		"gemini": gin.H{"enabled": geminiOn, "model": geminiModel},
+		"groq":   gin.H{"enabled": groqOn, "model": groqModel},
 	})
+}
+
+func pickHonestKeywords(in []string, max int) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, max)
+	for _, k := range in {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		key := strings.ToLower(k)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, k)
+		if len(out) >= max {
+			break
+		}
+	}
+	return out
+}
+
+func resolveStampTools() (python, script string) {
+	if v := strings.TrimSpace(os.Getenv("PDF_PYTHON")); v != "" {
+		python = v
+	}
+	if v := strings.TrimSpace(os.Getenv("STAMP_PDF_SCRIPT")); v != "" {
+		script = v
+	}
+	roots := []string{".", "..", "../..", "../../.."}
+	if python == "" {
+		for _, r := range roots {
+			p := filepath.Join(r, ".venv-pdf", "bin", "python")
+			if st, err := os.Stat(p); err == nil && !st.IsDir() {
+				python, _ = filepath.Abs(p)
+				break
+			}
+		}
+	}
+	if python == "" {
+		python = "python3"
+	}
+	if script == "" {
+		for _, r := range roots {
+			p := filepath.Join(r, "services", "api", "scripts", "stamp_pdf.py")
+			if st, err := os.Stat(p); err == nil && !st.IsDir() {
+				script, _ = filepath.Abs(p)
+				break
+			}
+		}
+	}
+	if script == "" {
+		script = "services/api/scripts/stamp_pdf.py"
+	}
+	return python, script
 }
 
 func stripJSONFence(s string) string {
 	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "```json")
-	s = strings.TrimPrefix(s, "```JSON")
-	s = strings.TrimPrefix(s, "```")
-	s = strings.TrimSuffix(s, "```")
+	for {
+		prev := s
+		if strings.HasPrefix(s, "```") {
+			if i := strings.Index(s, "\n"); i >= 0 {
+				s = s[i+1:]
+			} else {
+				s = strings.TrimPrefix(s, "```")
+			}
+		}
+		s = strings.TrimSpace(s)
+		if strings.HasSuffix(s, "```") {
+			s = strings.TrimSpace(strings.TrimSuffix(s, "```"))
+		}
+		if s == prev {
+			break
+		}
+	}
 	return strings.TrimSpace(s)
+}
+
+func cleanPlainResume(s string) string {
+	return stripJSONFence(s)
+}
+
+func extractJSONObject(s string) string {
+	s = stripJSONFence(s)
+	start := strings.Index(s, "{")
+	if start < 0 {
+		return s
+	}
+	depth := 0
+	inString := false
+	escape := false
+	for i := start; i < len(s); i++ {
+		ch := s[i]
+		if inString {
+			if escape {
+				escape = false
+				continue
+			}
+			if ch == '\\' {
+				escape = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return strings.TrimSpace(s[start : i+1])
+			}
+		}
+	}
+	return strings.TrimSpace(s[start:])
+}
+
+func splitCSVSkills(s string) []string {
+	parts := strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n'
+	})
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+		if len(out) >= 18 {
+			break
+		}
+	}
+	return out
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func extraLine(extra string) string {
@@ -328,6 +683,9 @@ func trim(s string, n int) string {
 func (h *Handler) Register(rg *gin.RouterGroup) {
 	rg.GET("/status", h.Status)
 	rg.POST("/analyze", h.Analyze)
+	rg.POST("/tailor", h.Tailor)
 	rg.POST("/prepare", h.Prepare)
 	rg.POST("/cover-letter", h.CoverLetter)
+	rg.GET("/tailored/:id/file", h.DownloadTailored)
+	rg.GET("/original-resume/file", h.DownloadOriginal)
 }
