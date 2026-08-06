@@ -127,6 +127,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }, true),
+  tailorResume: (body: {
+    job_id?: string;
+    title?: string;
+    company?: string;
+    description?: string;
+    tone?: "professional" | "concise" | "enthusiastic";
+    extra?: string;
+    missing_keywords?: string[];
+    missing_skills?: string[];
+    suggestions?: string[];
+  }) =>
+    request<PrepareResult>("/api/v1/ai/tailor", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }, true),
   prepareApplication: (body: {
     job_id?: string;
     title?: string;
