@@ -1,23 +1,29 @@
 import type { Metadata } from "next";
-import { Figtree, Syne } from "next/font/google";
+import { Inconsolata, Inter, Open_Sans } from "next/font/google";
 import "./globals.css";
 
-const syne = Syne({
-  variable: "--font-syne",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-  weight: ["600", "700", "800"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const figtree = Figtree({
-  variable: "--font-figtree",
+const openSans = Open_Sans({
+  variable: "--font-open-sans",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const inconsolata = Inconsolata({
+  variable: "--font-inconsolata",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
-  title: "JobRight — Match, forge, apply",
+  title: "JobRight — Less noise. More shipped applications.",
   description:
-    "Software engineering jobs from Remotive, Arbeitnow, RemoteOK and more. Score your resume, forge it for the role, and apply in-site.",
+    "Find software roles, tailor your resume to each job with ATS guidance, download a PDF, and apply on the employer site.",
 };
 
 export default function RootLayout({
@@ -26,7 +32,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${syne.variable} ${figtree.variable} h-full`}>
+    <html
+      lang="en"
+      className={`${inter.variable} ${openSans.variable} ${inconsolata.variable} h-full`}
+    >
       <body className="min-h-full antialiased">{children}</body>
     </html>
   );
