@@ -1,5 +1,5 @@
 import { SiteHeader } from "@/components/layout/SiteHeader";
-import { ApplyWorkspace } from "@/features/apply/ApplyWorkspace";
+import { PrepareWorkspace } from "@/features/apply/PrepareWorkspace";
 import { resolveJob } from "@/lib/jobs/resolveJob";
 import { notFound } from "next/navigation";
 
@@ -15,7 +15,7 @@ export default async function ApplyPage({
   return (
     <main>
       <SiteHeader solid />
-      <ApplyWorkspace job={job} />
+      <PrepareWorkspace job={job} />
     </main>
   );
 }

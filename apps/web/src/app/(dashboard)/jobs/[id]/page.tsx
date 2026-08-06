@@ -26,10 +26,10 @@ export default async function JobDetailPage({
         </p>
         <div className="hero__cta" style={{ marginTop: "1.5rem" }}>
           <Link href={`/jobs/${job.id}/apply`} className="btn btn-primary">
-            Apply in-site
+            Prepare resume & letter
           </Link>
           <a href={job.source_url} target="_blank" rel="noreferrer" className="btn btn-ghost">
-            Original listing
+            Apply on employer site
           </a>
         </div>
         <div className="surface" style={{ marginTop: "2rem", borderRadius: 16, padding: "1.5rem" }}>

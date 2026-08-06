@@ -16,7 +16,7 @@ function sourceLabel(url: string) {
 export function JobCard({ job, index = 0 }: { job: Job; index?: number }) {
   return (
     <article
-      className="job-card rise"
+      className="job-card"
       style={{ animationDelay: `${Math.min(index, 12) * 40}ms` }}
     >
       <div className="job-card__top">
@@ -37,7 +37,7 @@ export function JobCard({ job, index = 0 }: { job: Job; index?: number }) {
           Details
         </Link>
         <Link href={`/jobs/${job.id}/apply`} className="btn btn-primary btn-sm">
-          Apply in-site
+          Prepare resume
         </Link>
       </div>
     </article>
