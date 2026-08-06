@@ -77,6 +77,8 @@ export type AnalyzeResult = {
   strengths: string[];
   suggestions: string[];
   summary: string;
+  covered?: number;
+  total_keywords?: number;
   model?: string;
 };
 
@@ -84,12 +86,17 @@ export type PrepareResult = {
   headline: string;
   summary: string;
   skills: string[];
-  experience_bullets: string[];
-  education: string;
+  experience_bullets?: string[];
+  education?: string;
   resume_markdown: string;
   cover_letter: string;
   analyze: AnalyzeResult;
   model?: string;
+  original_resume_id?: string;
+  tailored_file_id?: string;
+  download_path?: string;
+  keywords_added?: string[];
+  changes_summary?: string;
 };
 
 export type AuthResponse = {
