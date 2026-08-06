@@ -70,6 +70,28 @@ export type AutofillData = {
   download_path?: string;
 };
 
+export type AnalyzeResult = {
+  match_score: number;
+  missing_keywords: string[];
+  missing_skills: string[];
+  strengths: string[];
+  suggestions: string[];
+  summary: string;
+  model?: string;
+};
+
+export type PrepareResult = {
+  headline: string;
+  summary: string;
+  skills: string[];
+  experience_bullets: string[];
+  education: string;
+  resume_markdown: string;
+  cover_letter: string;
+  analyze: AnalyzeResult;
+  model?: string;
+};
+
 export type AuthResponse = {
   token: string;
   user: User;
