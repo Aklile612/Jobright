@@ -18,6 +18,8 @@ type Config struct {
 	MaxUploadBytes  int64
 	GeminiAPIKey    string
 	GeminiModel     string
+	GroqAPIKey      string
+	GroqModel       string
 }
 
 func Load() Config {
@@ -32,6 +34,8 @@ func Load() Config {
 		MaxUploadBytes: int64(getenvInt("MAX_UPLOAD_BYTES", 6*1024*1024)),
 		GeminiAPIKey:   getenv("GEMINI_API_KEY", ""),
 		GeminiModel:    getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+		GroqAPIKey:     getenv("GROQ_API_KEY", ""),
+		GroqModel:      getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
 	}
 }
 
