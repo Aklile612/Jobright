@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .venv/
+.venv-pdf/
 venv/
 __pycache__/
 *.pyc
