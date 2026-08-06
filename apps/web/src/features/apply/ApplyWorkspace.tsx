@@ -45,9 +45,11 @@ function splitName(full: string) {
 export function ApplyWorkspace({ job }: { job: Job }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fieldsRef = useRef<Record<FieldKey, string> | null>(null);
+  const applyUrl = useMemo(() => resolveApplyUrl(job.source_url), [job.source_url]);
   const [authed, setAuthed] = useState(false);
   const [autofill, setAutofill] = useState<AutofillData | null>(null);
   const [status, setStatus] = useState("");
+  const [liveUrl, setLiveUrl] = useState(() => resolveApplyUrl(job.source_url));
   const [embedMode, setEmbedMode] = useState<"proxy" | "direct">("proxy");
   const [frameError, setFrameError] = useState(false);
   const [filledCount, setFilledCount] = useState<number | null>(null);
@@ -68,7 +70,9 @@ export function ApplyWorkspace({ job }: { job: Job }) {
 
   fieldsRef.current = fields;
 
-  const applyUrl = useMemo(() => resolveApplyUrl(job.source_url), [job.source_url]);
+  useEffect(() => {
+    setLiveUrl(applyUrl);
+  }, [applyUrl]);
 
   useEffect(() => {
     setAuthed(isAuthenticated());
@@ -102,7 +106,8 @@ export function ApplyWorkspace({ job }: { job: Job }) {
   useEffect(() => {
     setFrameError(false);
     setFilledCount(null);
-  }, [frameSrc]);
+    setLiveUrl(applyUrl);
+  }, [frameSrc, applyUrl]);
 
   const buildPayload = useCallback(() => {
     const f = fieldsRef.current || fields;
@@ -150,17 +155,27 @@ export function ApplyWorkspace({ job }: { job: Job }) {
     function onMessage(event: MessageEvent) {
       const data = event.data;
       if (!data || typeof data !== "object") return;
+      if (data.type === "jobright-auth-blocked" || data.type === "jobright-auth-popup") {
+        setStatus(
+          "Google login can’t run inside the embed. Use “Open to sign in” (new tab), sign in there, then come back.",
+        );
+      }
+      if (data.type === "jobright-navigate" && typeof data.url === "string") {
+        setLiveUrl(data.url);
+      }
       if (data.type === "jobright-autofill-ready") {
+        if (typeof data.page === "string") setLiveUrl(data.page);
         pushAutofill(true);
       }
       if (data.type === "jobright-autofill-result") {
         const n = Number(data.filled) || 0;
         setFilledCount(n);
+        if (typeof data.page === "string") setLiveUrl(data.page);
         if (n > 0) {
           setStatus(`Filled ${n} field${n === 1 ? "" : "s"} on the application form.`);
         } else {
           setStatus(
-            "No matching fields yet — open steps on the form (e.g. continue after email), then click Autofill again. Or use Copy + Open original.",
+            "No matching fields yet — continue inside the frame to the apply step, then click Autofill again.",
           );
         }
       }
@@ -369,22 +384,23 @@ export function ApplyWorkspace({ job }: { job: Job }) {
             className={embedMode === "proxy" ? "is-on" : ""}
             onClick={() => setEmbedMode("proxy")}
           >
-            In JobRight
+            Stay in JobRight
           </button>
           <button
             type="button"
             className={embedMode === "direct" ? "is-on" : ""}
-            onClick={() => setEmbedMode("direct")}
+            onClick={() => {
+              setEmbedMode("direct");
+              setStatus("Direct mode opens the real site — links may leave this tab. Prefer Stay in JobRight.");
+            }}
           >
             Direct site
           </button>
         </div>
 
-        {frameError || filledCount === 0 ? (
+        {frameError ? (
           <div className="notice">
-            Some boards only show an email step first, or block embeds. Enter email → continue on
-            the form, click <strong>Autofill</strong> again, or use <strong>Copy</strong> +{" "}
-            <strong>Open original</strong>.
+            This board blocked the embed. Stay on <strong>Stay in JobRight</strong>, hard-refresh, and try again.
           </div>
         ) : null}
 
@@ -394,26 +410,42 @@ export function ApplyWorkspace({ job }: { job: Job }) {
       <section className="apply-frame">
         <div className="apply-frame__bar">
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {applyUrl}
+            {liveUrl || applyUrl}
           </span>
-          <a
-            href={applyUrl}
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontWeight: 700, color: "var(--text)", flexShrink: 0 }}
-          >
-            Open original
-          </a>
+          <div style={{ display: "flex", gap: "0.65rem", flexShrink: 0 }}>
+            <a
+              href={liveUrl || applyUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontWeight: 700, color: "var(--text)", textDecoration: "none" }}
+            >
+              Open to sign in
+            </a>
+            <button
+              type="button"
+              onClick={() => pushAutofill(false)}
+              style={{
+                border: 0,
+                background: "transparent",
+                color: "var(--text)",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Refill
+            </button>
+          </div>
         </div>
         {frameSrc ? (
           <iframe
             ref={iframeRef}
             title={`Apply · ${job.title}`}
             src={frameSrc}
+            // allow-popups kept so site widgets work; bridge rewrites new tabs into the proxy
             sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             onLoad={() => {
-              setTimeout(() => pushAutofill(true), 400);
-              setTimeout(() => pushAutofill(true), 1500);
+              // One delayed autofill pass — avoid stacking timers that fight the page
+              setTimeout(() => pushAutofill(true), 800);
             }}
             onError={() => setFrameError(true)}
           />
