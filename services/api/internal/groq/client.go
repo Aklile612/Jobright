@@ -71,8 +71,28 @@ func (c *Client) Chat(system, user string, maxTokens int) (string, error) {
 		return "", fmt.Errorf("GROQ_API_KEY is not configured")
 	}
 	if maxTokens <= 0 {
-		maxTokens = 2500
+		maxTokens = 1800
 	}
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		text, err := c.chatOnce(system, user, maxTokens)
+		if err == nil {
+			return text, nil
+		}
+		lastErr = err
+		wait, ok := rateLimitWait(err.Error())
+		if !ok {
+			return "", err
+		}
+		if wait > 45*time.Second {
+			wait = 45 * time.Second
+		}
+		time.Sleep(wait + 500*time.Millisecond)
+	}
+	return "", lastErr
+}
+
+func (c *Client) chatOnce(system, user string, maxTokens int) (string, error) {
 	body, err := json.Marshal(chatRequest{
 		Model: c.model,
 		Messages: []chatMessage{
@@ -106,6 +126,9 @@ func (c *Client) Chat(system, user string, maxTokens int) (string, error) {
 	if parsed.Error != nil {
 		return "", fmt.Errorf("groq: %s", parsed.Error.Message)
 	}
+	if resp.StatusCode == 429 {
+		return "", fmt.Errorf("groq: %s", strings.TrimSpace(string(raw)))
+	}
 	if resp.StatusCode >= 300 {
 		return "", fmt.Errorf("groq HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
@@ -113,4 +136,23 @@ func (c *Client) Chat(system, user string, maxTokens int) (string, error) {
 		return "", fmt.Errorf("groq returned empty response")
 	}
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+}
+
+func rateLimitWait(msg string) (time.Duration, bool) {
+	low := strings.ToLower(msg)
+	if !strings.Contains(low, "rate limit") && !strings.Contains(low, "tokens per minute") {
+		return 0, false
+	}
+	// "Please try again in 19.73s"
+	idx := strings.Index(low, "try again in ")
+	if idx < 0 {
+		return 20 * time.Second, true
+	}
+	rest := msg[idx+len("try again in "):]
+	var secs float64
+	n, _ := fmt.Sscanf(rest, "%f", &secs)
+	if n != 1 || secs <= 0 {
+		return 20 * time.Second, true
+	}
+	return time.Duration(secs * float64(time.Second)), true
 }
