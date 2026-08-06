@@ -3,8 +3,13 @@ import type { Job } from "@/lib/types";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 export async function loadSoftwareJobs(): Promise<Job[]> {
-  const fromApi = await loadFromGoApi();
+  // Fast path: read from Postgres (no scrape). Sync is separate / throttled on the API.
+  const fromApi = await loadFromGoApi(false);
   if (fromApi.length > 0) return fromApi;
+
+  // Empty DB only: sync once, then list again.
+  const afterSync = await loadFromGoApi(true);
+  if (afterSync.length > 0) return afterSync;
 
   const fromRemotive = await loadFromRemotive();
   if (fromRemotive.length > 0) return fromRemotive;
@@ -12,18 +17,23 @@ export async function loadSoftwareJobs(): Promise<Job[]> {
   return demoJobs();
 }
 
-async function loadFromGoApi(): Promise<Job[]> {
-  try {
-    await fetch(`${API_URL}/api/v1/jobs/sync`, {
-      method: "POST",
-      cache: "no-store",
-    });
-  } catch {
-    // API may be offline
+async function loadFromGoApi(forceSync: boolean): Promise<Job[]> {
+  if (forceSync) {
+    try {
+      await fetch(`${API_URL}/api/v1/jobs/sync`, {
+        method: "POST",
+        cache: "no-store",
+      });
+    } catch {
+      // API may be offline
+    }
   }
 
   try {
-    const res = await fetch(`${API_URL}/api/v1/jobs?limit=60`, { cache: "no-store" });
+    const res = await fetch(`${API_URL}/api/v1/jobs?limit=60`, {
+      // Allow Next to cache briefly; API also caches in Redis.
+      next: { revalidate: 60 },
+    });
     if (!res.ok) return [];
     const jobs = (await res.json()) as Job[];
     return Array.isArray(jobs) ? jobs : [];
