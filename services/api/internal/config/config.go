@@ -20,6 +20,7 @@ type Config struct {
 	GeminiModel     string
 	GroqAPIKey      string
 	GroqModel       string
+	RedisURL        string
 }
 
 func Load() Config {
@@ -36,6 +37,7 @@ func Load() Config {
 		GeminiModel:    getenv("GEMINI_MODEL", "gemini-2.0-flash"),
 		GroqAPIKey:     getenv("GROQ_API_KEY", ""),
 		GroqModel:      getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
+		RedisURL:       getenv("REDIS_URL", "redis://localhost:6379/0"),
 	}
 }
 
