@@ -10,10 +10,12 @@ import (
 	"github.com/jobright/api/internal/applications"
 	"github.com/jobright/api/internal/auth"
 	"github.com/jobright/api/internal/bookmarks"
+	"github.com/jobright/api/internal/cache"
 	"github.com/jobright/api/internal/config"
 	"github.com/jobright/api/internal/database"
 	"github.com/jobright/api/internal/extension"
 	"github.com/jobright/api/internal/forge"
+	"github.com/jobright/api/internal/gemini"
 	"github.com/jobright/api/internal/groq"
 	"github.com/jobright/api/internal/jobs"
 	"github.com/jobright/api/internal/resumes"
@@ -41,9 +43,11 @@ func main() {
 	}
 
 	forgeClient := forge.NewClient(cfg.ResumeForgeURL)
-	aiClient := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
+	geminiClient := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel)
+	groqClient := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
+	store := cache.New(cfg.RedisURL)
 	authSvc := auth.NewService(db, forgeClient, cfg.JWTSecret, cfg.JWTExpiry)
-	jobSvc := jobs.NewService(db)
+	jobSvc := jobs.NewService(db, store)
 	resumeSvc := resumes.NewService(db, authSvc, forgeClient, cfg.UploadDir, cfg.MaxUploadBytes)
 	appSvc := applications.NewService(db, authSvc, resumeSvc, forgeClient)
 	bookmarkSvc := bookmarks.NewService(db)
@@ -59,14 +63,22 @@ func main() {
 		Bookmarks:    bookmarks.NewHandler(bookmarkSvc),
 		Extension:    extension.NewHandler(db, authSvc),
 		Scraper:      scraper.NewHandler(scraperSvc),
-		AI:           ai.NewHandler(db, authSvc, aiClient),
+		AI:           ai.NewHandler(db, authSvc, geminiClient, groqClient, cfg.UploadDir),
 	})
 
-	aiStatus := "off"
-	if aiClient.Enabled() {
-		aiStatus = aiClient.Model()
+	geminiStatus := "off"
+	if geminiClient.Enabled() {
+		geminiStatus = geminiClient.Model()
 	}
-	log.Printf("api listening on :%s (resume_forge=%s groq=%s)", cfg.Port, cfg.ResumeForgeURL, aiStatus)
+	groqStatus := "off"
+	if groqClient.Enabled() {
+		groqStatus = groqClient.Model()
+	}
+	redisStatus := "memory"
+	if store.EnabledRedis() {
+		redisStatus = "redis"
+	}
+	log.Printf("api listening on :%s (resume_forge=%s gemini=%s groq=%s cache=%s)", cfg.Port, cfg.ResumeForgeURL, geminiStatus, groqStatus, redisStatus)
 	if err := engine.Run(":" + cfg.Port); err != nil {
 		log.Fatal(err)
 	}
