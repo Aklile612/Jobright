@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const DefaultModel = "gemini-2.0-flash"
+
 type Client struct {
 	apiKey  string
 	model   string
@@ -19,7 +21,7 @@ type Client struct {
 
 func NewClient(apiKey, model string) *Client {
 	if model == "" {
-		model = "gemini-2.0-flash"
+		model = DefaultModel
 	}
 	return &Client{
 		apiKey:  strings.TrimSpace(apiKey),
@@ -33,8 +35,16 @@ func (c *Client) Enabled() bool {
 	return c != nil && c.apiKey != ""
 }
 
+func (c *Client) Model() string {
+	if c == nil {
+		return ""
+	}
+	return c.model
+}
+
 type generateRequest struct {
 	Contents         []content        `json:"contents"`
+	SystemInstruction *content        `json:"systemInstruction,omitempty"`
 	GenerationConfig generationConfig `json:"generationConfig"`
 }
 
@@ -65,15 +75,20 @@ type generateResponse struct {
 	} `json:"error"`
 }
 
-func (c *Client) GenerateCoverLetter(prompt string) (string, error) {
+// Chat is used for ATS / cover letters / other smaller tasks.
+func (c *Client) Chat(system, user string, maxTokens int) (string, error) {
 	if !c.Enabled() {
 		return "", fmt.Errorf("GEMINI_API_KEY is not configured")
 	}
+	if maxTokens <= 0 {
+		maxTokens = 1024
+	}
 	body, err := json.Marshal(generateRequest{
-		Contents: []content{{Parts: []part{{Text: prompt}}}},
+		SystemInstruction: &content{Parts: []part{{Text: system}}},
+		Contents:          []content{{Parts: []part{{Text: user}}}},
 		GenerationConfig: generationConfig{
-			Temperature:     0.7,
-			MaxOutputTokens: 1200,
+			Temperature:     0.4,
+			MaxOutputTokens: maxTokens,
 		},
 	})
 	if err != nil {
@@ -106,11 +121,20 @@ func (c *Client) GenerateCoverLetter(prompt string) (string, error) {
 		return "", fmt.Errorf("gemini HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("gemini returned empty cover letter")
+		return "", fmt.Errorf("gemini returned empty response")
 	}
 	text := strings.TrimSpace(parsed.Candidates[0].Content.Parts[0].Text)
 	if text == "" {
-		return "", fmt.Errorf("gemini returned empty cover letter")
+		return "", fmt.Errorf("gemini returned empty response")
 	}
 	return text, nil
+}
+
+// GenerateCoverLetter kept for compatibility.
+func (c *Client) GenerateCoverLetter(prompt string) (string, error) {
+	return c.Chat(
+		"Write a job application cover letter. Return ONLY the letter body — no markdown, no title.",
+		prompt,
+		900,
+	)
 }
