@@ -14,7 +14,7 @@ import (
 	"github.com/jobright/api/internal/database"
 	"github.com/jobright/api/internal/extension"
 	"github.com/jobright/api/internal/forge"
-	"github.com/jobright/api/internal/gemini"
+	"github.com/jobright/api/internal/groq"
 	"github.com/jobright/api/internal/jobs"
 	"github.com/jobright/api/internal/resumes"
 	"github.com/jobright/api/internal/router"
@@ -41,7 +41,7 @@ func main() {
 	}
 
 	forgeClient := forge.NewClient(cfg.ResumeForgeURL)
-	geminiClient := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel)
+	aiClient := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 	authSvc := auth.NewService(db, forgeClient, cfg.JWTSecret, cfg.JWTExpiry)
 	jobSvc := jobs.NewService(db)
 	resumeSvc := resumes.NewService(db, authSvc, forgeClient, cfg.UploadDir, cfg.MaxUploadBytes)
@@ -59,14 +59,14 @@ func main() {
 		Bookmarks:    bookmarks.NewHandler(bookmarkSvc),
 		Extension:    extension.NewHandler(db, authSvc),
 		Scraper:      scraper.NewHandler(scraperSvc),
-		AI:           ai.NewHandler(db, authSvc, geminiClient),
+		AI:           ai.NewHandler(db, authSvc, aiClient),
 	})
 
-	geminiStatus := "off"
-	if geminiClient.Enabled() {
-		geminiStatus = cfg.GeminiModel
+	aiStatus := "off"
+	if aiClient.Enabled() {
+		aiStatus = aiClient.Model()
 	}
-	log.Printf("api listening on :%s (resume_forge=%s gemini=%s)", cfg.Port, cfg.ResumeForgeURL, geminiStatus)
+	log.Printf("api listening on :%s (resume_forge=%s groq=%s)", cfg.Port, cfg.ResumeForgeURL, aiStatus)
 	if err := engine.Run(":" + cfg.Port); err != nil {
 		log.Fatal(err)
 	}
