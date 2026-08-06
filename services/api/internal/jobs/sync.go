@@ -19,12 +19,19 @@ type SyncResult struct {
 }
 
 func (s *Service) SyncSoftwareJobs() ([]SyncResult, error) {
+	if !s.BeginSync() {
+		return []SyncResult{{
+			Source: "throttle",
+			Error:  "skipped — jobs were synced recently (cached ~15m)",
+		}}, nil
+	}
 	results := []SyncResult{
 		s.syncJobRight(),
 		s.syncRemotive(),
 		s.syncArbeitnow(),
 		s.syncRemoteOK(),
 	}
+	s.EndSync()
 	return results, nil
 }
 
