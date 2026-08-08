@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -233,7 +235,7 @@ func (h *Handler) runAnalyze(user *models.User, title, company, description stri
 			base.Covered, base.Total, base.MatchScore,
 		),
 		Suggestions: []string{
-			"Keep your 1-page PDF layout; we stamp missing keywords onto your original file when you tailor.",
+			"Keep your 1-page PDF; we weave missing keywords into your Skills and Projects when you tailor.",
 			"Only claim keywords you can defend in interviews.",
 		},
 	}
@@ -311,7 +313,7 @@ func (h *Handler) Tailor(c *gin.Context) {
 		}
 	}
 
-	out, err := h.runTailor(user, title, company, description, req.Tone, req.Extra, &analyze)
+	out, err := h.runTailor(user, req.JobID, title, company, description, req.Tone, req.Extra, &analyze)
 	if err != nil {
 		response.Internal(c, err.Error())
 		return
@@ -334,7 +336,7 @@ func (h *Handler) Prepare(c *gin.Context) {
 		response.Internal(c, err.Error())
 		return
 	}
-	out, err := h.runTailor(user, title, company, description, req.Tone, req.Extra, analyze)
+	out, err := h.runTailor(user, req.JobID, title, company, description, req.Tone, req.Extra, analyze)
 	if err != nil {
 		response.Internal(c, err.Error())
 		return
@@ -342,7 +344,7 @@ func (h *Handler) Prepare(c *gin.Context) {
 	response.OK(c, out)
 }
 
-func (h *Handler) runTailor(user *models.User, title, company, description, tone, extra string, analyze *analyzeResult) (*tailorResult, error) {
+func (h *Handler) runTailor(user *models.User, jobIDStr, title, company, description, tone, extra string, analyze *analyzeResult) (*tailorResult, error) {
 	tone = strings.ToLower(strings.TrimSpace(tone))
 	if tone != "concise" && tone != "enthusiastic" {
 		tone = "professional"
@@ -409,13 +411,42 @@ Max 8 keywords. Never invent employers or degrees. Prefer skills already implied
 	}
 
 	summary := fmt.Sprintf(
-		"Kept your original 1-page PDF and stamped %d ATS keywords onto it for %s.",
-		len(keywords), stampTitle,
+		"Updated your original PDF for %s — keywords woven into Technical Skills and Projects (same layout/fonts).",
+		stampTitle,
 	)
 	preview := summary + "\n\nKeywords added:\n- " + strings.Join(keywords, "\n- ")
 	if len(keywords) == 0 {
-		preview = summary + "\n\nNo extra keywords to stamp — your resume already covers the main terms."
+		preview = summary + "\n\nNo extra keywords needed — your resume already covers the main terms."
 	}
+
+	// Text used for future ATS compare = original parse + added keywords.
+	tailoredText := strings.TrimSpace(resume.ParsedText + "\n" + strings.Join(keywords, " "))
+	after := atsscore.Score(tailoredText+"\n"+user.Skills+"\n"+user.Headline, title, description)
+
+	var jobUUID *uuid.UUID
+	if id, err := uuid.Parse(strings.TrimSpace(jobIDStr)); err == nil {
+		jobUUID = &id
+	}
+	srcID := resume.ID
+	rec := &models.TailoredVersion{
+		UserID:          user.ID,
+		JobID:           jobUUID,
+		JobTitle:        title,
+		JobCompany:      company,
+		MatchScore:      analyze.MatchScore,
+		AfterScore:      after.MatchScore,
+		Covered:         after.Covered,
+		TotalKeywords:   after.Total,
+		KeywordsAdded:   keywords,
+		MissingKeywords: after.MissingKeywords,
+		MissingSkills:   after.MissingSkills,
+		FileID:          fileID,
+		FilePath:        dst,
+		ParsedText:      tailoredText,
+		CoverLetter:     coverLetter,
+		SourceResumeID:  &srcID,
+	}
+	_ = h.db.Create(rec).Error
 
 	return &tailorResult{
 		Headline:         firstNonEmpty(user.Headline, title),
@@ -431,6 +462,92 @@ Max 8 keywords. Never invent employers or degrees. Prefer skills already implied
 		KeywordsAdded:    keywords,
 		ChangesSummary:   summary,
 	}, nil
+}
+
+type tailoredListItem struct {
+	ID                 string   `json:"id"`
+	FileID             string   `json:"file_id"`
+	JobID              string   `json:"job_id,omitempty"`
+	JobTitle           string   `json:"job_title"`
+	JobCompany         string   `json:"job_company"`
+	MatchScore         float64  `json:"match_score"`
+	AfterScore         float64  `json:"after_score"`
+	ScoreForCurrentJob float64  `json:"score_for_current_job"`
+	Covered            int      `json:"covered"`
+	TotalKeywords      int      `json:"total_keywords"`
+	KeywordsAdded      []string `json:"keywords_added"`
+	MissingKeywords    []string `json:"missing_keywords"`
+	MissingSkills      []string `json:"missing_skills"`
+	DownloadPath       string   `json:"download_path"`
+	CoverLetter        string   `json:"cover_letter,omitempty"`
+	CreatedAt          string   `json:"created_at"`
+	ForThisJob         bool     `json:"for_this_job"`
+}
+
+func (h *Handler) ListTailored(c *gin.Context) {
+	userID := middleware.UserID(c)
+	title := strings.TrimSpace(c.Query("title"))
+	company := strings.TrimSpace(c.Query("company"))
+	description := strings.TrimSpace(c.Query("description"))
+	jobID := strings.TrimSpace(c.Query("job_id"))
+
+	var rows []models.TailoredVersion
+	if err := h.db.Where("user_id = ?", userID).Order("created_at desc").Limit(40).Find(&rows).Error; err != nil {
+		response.Internal(c, "failed to list tailored resumes")
+		return
+	}
+
+	out := make([]tailoredListItem, 0, len(rows))
+	for _, r := range rows {
+		scoreCurrent := r.AfterScore
+		covered, total := r.Covered, r.TotalKeywords
+		missingK, missingS := r.MissingKeywords, r.MissingSkills
+		if title != "" || description != "" {
+			sc := atsscore.Score(r.ParsedText, title, description)
+			scoreCurrent = sc.MatchScore
+			covered, total = sc.Covered, sc.Total
+			missingK, missingS = sc.MissingKeywords, sc.MissingSkills
+		}
+		jid := ""
+		if r.JobID != nil {
+			jid = r.JobID.String()
+		}
+		forThis := false
+		if jobID != "" && jid == jobID {
+			forThis = true
+		} else if jobID == "" && title != "" && company != "" {
+			forThis = strings.EqualFold(r.JobTitle, title) && strings.EqualFold(r.JobCompany, company)
+		}
+		out = append(out, tailoredListItem{
+			ID:                 r.ID.String(),
+			FileID:             r.FileID,
+			JobID:              jid,
+			JobTitle:           r.JobTitle,
+			JobCompany:         r.JobCompany,
+			MatchScore:         r.MatchScore,
+			AfterScore:         r.AfterScore,
+			ScoreForCurrentJob: scoreCurrent,
+			Covered:            covered,
+			TotalKeywords:      total,
+			KeywordsAdded:      r.KeywordsAdded,
+			MissingKeywords:    missingK,
+			MissingSkills:      missingS,
+			DownloadPath:       "/api/v1/ai/tailored/" + r.FileID + "/file",
+			CoverLetter:        r.CoverLetter,
+			CreatedAt:          r.CreatedAt.UTC().Format(time.RFC3339),
+			ForThisJob:         forThis,
+		})
+	}
+
+	// Best first for current job compare
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].ScoreForCurrentJob == out[j].ScoreForCurrentJob {
+			return out[i].CreatedAt > out[j].CreatedAt
+		}
+		return out[i].ScoreForCurrentJob > out[j].ScoreForCurrentJob
+	})
+
+	response.OK(c, gin.H{"items": out, "count": len(out)})
 }
 
 func (h *Handler) DownloadTailored(c *gin.Context) {
@@ -504,7 +621,7 @@ func (h *Handler) Status(c *gin.Context) {
 		"enabled": geminiOn || groqOn,
 		"routing": gin.H{
 			"ats_score":     "deterministic keyword coverage (+ optional AI notes)",
-			"resume_tailor": "stamp keywords onto original PDF (keeps 1 page)",
+			"resume_tailor": "weave keywords into skills/projects on original PDF",
 			"cover_letter":  "gemini (fallback groq)",
 		},
 		"pdf_stamp": gin.H{
@@ -686,6 +803,7 @@ func (h *Handler) Register(rg *gin.RouterGroup) {
 	rg.POST("/tailor", h.Tailor)
 	rg.POST("/prepare", h.Prepare)
 	rg.POST("/cover-letter", h.CoverLetter)
+	rg.GET("/tailored", h.ListTailored)
 	rg.GET("/tailored/:id/file", h.DownloadTailored)
 	rg.GET("/original-resume/file", h.DownloadOriginal)
 }
