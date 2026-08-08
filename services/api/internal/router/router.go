@@ -36,12 +36,17 @@ func New(deps Deps) *gin.Engine {
 	r.Use(gin.Recovery(), gin.Logger(), middleware.CORS(deps.Config.CORSOrigins))
 
 	r.GET("/", func(c *gin.Context) {
+		frontend := "http://localhost:3000"
+		if len(deps.Config.CORSOrigins) > 0 && deps.Config.CORSOrigins[0] != "*" {
+			frontend = deps.Config.CORSOrigins[0]
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"service":  "jobright-api",
 			"status":   "ok",
 			"health":   "/health",
 			"api":      "/api/v1",
-			"frontend": "http://localhost:3000",
+			"frontend": frontend,
+			"cors":     deps.Config.CORSOrigins,
 		})
 	})
 
