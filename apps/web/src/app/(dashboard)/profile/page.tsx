@@ -43,7 +43,15 @@ export default function ProfilePage() {
       } else {
         await load();
       }
-      setMessage("CV uploaded — profile fields were filled from your resume.");
+      if (result.parse_ok === false) {
+        setMessage(
+          result.parse_error
+            ? `CV saved, but parsing failed: ${result.parse_error}`
+            : "CV saved, but we couldn’t extract text. Try a text-based PDF or DOCX.",
+        );
+      } else {
+        setMessage("CV uploaded — profile fields were filled from your resume.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed — is the API running?");
     } finally {
