@@ -17,35 +17,61 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// NormalizeOrigin strips quotes/whitespace/trailing slash so env typos still match.
+func NormalizeOrigin(o string) string {
+	o = strings.TrimSpace(o)
+	o = strings.Trim(o, `"'`)
+	return strings.TrimRight(o, "/")
+}
+
 func CORS(origins []string) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(origins))
+	allowAll := len(origins) == 0
 	for _, o := range origins {
-		o = strings.TrimSpace(o)
-		if o != "" {
-			allowed[o] = struct{}{}
+		o = NormalizeOrigin(o)
+		if o == "" {
+			continue
 		}
+		if o == "*" {
+			allowAll = true
+			continue
+		}
+		allowed[o] = struct{}{}
 	}
+	if len(allowed) == 0 {
+		allowAll = true
+	}
+
 	return func(c *gin.Context) {
-		origin := strings.TrimSpace(c.GetHeader("Origin"))
-		_, ok := allowed[origin]
-		if ok || len(allowed) == 0 {
-			if origin != "" {
-				c.Header("Access-Control-Allow-Origin", origin)
-				c.Header("Vary", "Origin")
-			} else if len(origins) > 0 {
-				c.Header("Access-Control-Allow-Origin", strings.TrimSpace(origins[0]))
-			}
+		origin := NormalizeOrigin(c.GetHeader("Origin"))
+		if origin != "" && (allowAll || originAllowed(allowed, origin)) {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+			// Credentials unused by the web app (Bearer token), but safe when echoing a concrete origin.
+			c.Header("Access-Control-Allow-Credentials", "true")
+		} else if origin == "" && allowAll {
+			c.Header("Access-Control-Allow-Origin", "*")
 		}
-		c.Header("Access-Control-Allow-Credentials", "true")
-		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, Origin")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		c.Header("Access-Control-Max-Age", "86400")
 		if c.Request.Method == "OPTIONS" {
-			// Always end preflight; browser still requires Allow-Origin when Origin was sent.
 			c.AbortWithStatus(204)
 			return
 		}
 		c.Next()
 	}
+}
+
+func originAllowed(allowed map[string]struct{}, origin string) bool {
+	if _, ok := allowed[origin]; ok {
+		return true
+	}
+	// Allow Vercel preview URLs when any *.vercel.app entry is configured.
+	if _, ok := allowed["*.vercel.app"]; ok && strings.HasSuffix(origin, ".vercel.app") && strings.HasPrefix(origin, "https://") {
+		return true
+	}
+	return false
 }
 
 func Auth(secret string) gin.HandlerFunc {
