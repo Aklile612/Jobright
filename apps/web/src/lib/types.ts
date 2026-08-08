@@ -99,6 +99,26 @@ export type PrepareResult = {
   changes_summary?: string;
 };
 
+export type TailoredVersion = {
+  id: string;
+  file_id: string;
+  job_id?: string;
+  job_title: string;
+  job_company: string;
+  match_score: number;
+  after_score: number;
+  score_for_current_job: number;
+  covered: number;
+  total_keywords: number;
+  keywords_added: string[];
+  missing_keywords: string[];
+  missing_skills: string[];
+  download_path: string;
+  cover_letter?: string;
+  created_at: string;
+  for_this_job: boolean;
+};
+
 export type AuthResponse = {
   token: string;
   user: User;
