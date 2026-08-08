@@ -1,0 +1,23 @@
+# Monorepo: language lives in services/api, not at repo root.
+# This gives Nixpacks (EthioDeploy) an explicit build plan.
+
+[phases.setup]
+nixPkgs = ["go"]
+
+[phases.install]
+cmds = ["cd services/api && go mod download"]
+
+[phases.build]
+cmds = [
+  "mkdir -p /app/bin /app/storage/resumes",
+  "cd services/api && CGO_ENABLED=0 go build -o /app/bin/api ./cmd/server",
+  "cp -R services/api/scripts /app/scripts || true"
+]
+
+[start]
+cmd = "/app/bin/api"
+
+[variables]
+UPLOAD_DIR = "/app/storage/resumes"
+STAMP_PDF_SCRIPT = "/app/scripts/stamp_pdf.py"
+PORT = "8080"

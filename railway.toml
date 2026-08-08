@@ -1,0 +1,4 @@
+# Force Docker builder (used by Nixpacks-compatible hosts that read this file)
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
