@@ -7,6 +7,7 @@ import type {
   Job,
   PrepareResult,
   Resume,
+  TailoredVersion,
   User,
 } from "./types";
 
@@ -42,7 +43,12 @@ async function request<T>(
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(res.status, data.error || data.detail || "Request failed");
+    const raw = data.error || data.detail || "Request failed";
+    const message =
+      res.status === 401
+        ? "Session expired — please log in again"
+        : raw;
+    throw new ApiError(res.status, message);
   }
   return data as T;
 }
@@ -142,6 +148,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }, true),
+  listTailoredVersions: (params?: {
+    job_id?: string;
+    title?: string;
+    company?: string;
+    description?: string;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.job_id) q.set("job_id", params.job_id);
+    if (params?.title) q.set("title", params.title);
+    if (params?.company) q.set("company", params.company);
+    if (params?.description) q.set("description", params.description.slice(0, 2500));
+    const qs = q.toString();
+    return request<{ items: TailoredVersion[]; count: number }>(
+      `/api/v1/ai/tailored${qs ? `?${qs}` : ""}`,
+      {},
+      true,
+    );
+  },
   prepareApplication: (body: {
     job_id?: string;
     title?: string;
