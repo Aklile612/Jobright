@@ -125,3 +125,32 @@ func (b *Bookmark) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+// TailoredVersion is a saved PDF tailor run (history + ATS for compare).
+type TailoredVersion struct {
+	ID               uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	UserID           uuid.UUID  `gorm:"type:uuid;index;not null" json:"user_id"`
+	JobID            *uuid.UUID `gorm:"type:uuid;index" json:"job_id,omitempty"`
+	JobTitle         string     `gorm:"size:255" json:"job_title"`
+	JobCompany       string     `gorm:"size:255" json:"job_company"`
+	MatchScore       float64    `json:"match_score"`
+	AfterScore       float64    `json:"after_score"`
+	Covered          int        `json:"covered"`
+	TotalKeywords    int        `json:"total_keywords"`
+	KeywordsAdded    []string   `gorm:"serializer:json" json:"keywords_added"`
+	MissingKeywords  []string   `gorm:"serializer:json" json:"missing_keywords"`
+	MissingSkills    []string   `gorm:"serializer:json" json:"missing_skills"`
+	FileID           string     `gorm:"size:64;index" json:"file_id"`
+	FilePath         string     `gorm:"size:512" json:"-"`
+	ParsedText       string     `gorm:"type:text" json:"-"`
+	CoverLetter      string     `gorm:"type:text" json:"cover_letter,omitempty"`
+	SourceResumeID   *uuid.UUID `gorm:"type:uuid" json:"source_resume_id,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+}
+
+func (t *TailoredVersion) BeforeCreate(tx *gorm.DB) error {
+	if t.ID == uuid.Nil {
+		t.ID = uuid.New()
+	}
+	return nil
+}
