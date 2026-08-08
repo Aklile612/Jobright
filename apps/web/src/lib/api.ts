@@ -84,11 +84,12 @@ export const api = {
     const form = new FormData();
     form.append("file", file);
     form.append("name", name);
-    return request<{ resume: Resume; profile: User }>(
-      "/api/v1/resumes",
-      { method: "POST", body: form },
-      true,
-    );
+    return request<{
+      resume: Resume;
+      profile: User;
+      parse_ok?: boolean;
+      parse_error?: string;
+    }>("/api/v1/resumes", { method: "POST", body: form }, true);
   },
   deleteResume: (id: string) =>
     request<void>(`/api/v1/resumes/${id}`, { method: "DELETE" }, true),
