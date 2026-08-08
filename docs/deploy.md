@@ -18,7 +18,8 @@
 |-----|--------|
 | `DATABASE_URL` | from Postgres addon |
 | `JWT_SECRET` | long random string |
-| `CORS_ORIGINS` | your frontend URL (e.g. `https://….ethiodeploy.app`) |
+| `CORS_ORIGINS` | optional; use `*` or leave unset. Any origin is allowed unless `CORS_STRICT=true` |
+| `CORS_STRICT` | set `true` only if you want an exact allowlist from `CORS_ORIGINS` |
 | `PORT` | usually injected by the platform |
 | `GROQ_API_KEY` / `GEMINI_API_KEY` | optional AI |
 | `REDIS_URL` | leave empty (in-memory cache) |
