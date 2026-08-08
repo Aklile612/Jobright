@@ -1,29 +1,49 @@
 # EthioDeploy always uses Nixpacks. Their nixpkgs pin has no `go_1_22`
 # package, so we install official Go from go.dev instead.
+# Python/poppler via aptPkgs often don't reach the runtime image, so we also
+# install a portable CPython + venv under /app during the install phase.
 
 [phases.setup]
-aptPkgs = ["curl", "ca-certificates", "gcc", "libc6-dev"]
+aptPkgs = [
+  "curl",
+  "ca-certificates",
+  "gcc",
+  "libc6-dev",
+  "poppler-utils",
+  "python3",
+  "python3-pip",
+  "python3-venv",
+  "fontconfig",
+  "fonts-dejavu-core",
+]
+nixPkgs = ["poppler_utils"]
 
 [phases.install]
 cmds = [
   "curl -fsSL https://go.dev/dl/go1.22.12.linux-amd64.tar.gz -o /tmp/go.tgz",
   "rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz",
   "/usr/local/go/bin/go version",
-  "cd services/api && /usr/local/go/bin/go mod download"
+  "cd services/api && /usr/local/go/bin/go mod download",
+  "bash services/api/scripts/install_pdf_runtime.sh"
 ]
 
 [phases.build]
 cmds = [
   "mkdir -p /app/bin /app/storage/resumes",
   "cd services/api && CGO_ENABLED=0 /usr/local/go/bin/go build -o /app/bin/api ./cmd/server",
-  "cp -R services/api/scripts /app/scripts || true"
+  "cp -R services/api/scripts /app/scripts",
+  "if [ -d /app/.venv-pdf ]; then echo 'venv ready'; elif [ -d .venv-pdf ]; then cp -a .venv-pdf /app/.venv-pdf; fi",
+  "command -v pdftotext || true",
+  "/app/.venv-pdf/bin/python -c 'import pymupdf; print(\"pymupdf\", pymupdf.__doc__[:20])' || true"
 ]
 
 [start]
 cmd = "/app/bin/api"
 
 [variables]
-PATH = "/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+PATH = "/app/.venv-pdf/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 UPLOAD_DIR = "/app/storage/resumes"
 STAMP_PDF_SCRIPT = "/app/scripts/stamp_pdf.py"
+EXTRACT_PDF_SCRIPT = "/app/scripts/extract_pdf_text.py"
+PDF_PYTHON = "/app/.venv-pdf/bin/python"
 PORT = "8080"

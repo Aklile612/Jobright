@@ -25,6 +25,14 @@
 | `REDIS_URL` | leave empty (in-memory cache) |
 | `UPLOAD_DIR` | `/app/storage/resumes` |
 
+Resume PDF parsing needs **`poppler-utils`** (`pdftotext`). Tailoring needs **Python + pymupdf**.
+
+`nixpacks.toml` installs a venv at `/app/.venv-pdf` during build and sets:
+- `PDF_PYTHON=/app/.venv-pdf/bin/python`
+- `STAMP_PDF_SCRIPT=/app/scripts/stamp_pdf.py`
+
+After redeploy, confirm: `GET /api/v1/ai/status` (auth) should show `pdf_stamp.python` pointing at that venv. Re-upload your CV once so parse text is stored (needed for ATS %).
+
 5. Health check path: `/health`
 
 ## Deploy the frontend (separate service)
