@@ -31,6 +31,10 @@ Or full stack (API + Postgres):
 docker compose -f infra/docker/docker-compose.yml up --build
 ```
 
+## Deploy (EthioDeploy / Render)
+
+Nixpacks fails at the monorepo root (no `go.mod` there). Use the root **Dockerfile** and set the builder to Docker. See [docs/deploy.md](docs/deploy.md).
+
 ## Go API routes
 
 | Method | Path | Auth | Purpose |
