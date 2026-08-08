@@ -61,22 +61,67 @@ func extractPDFText(content []byte) (string, error) {
 	}
 	tmp.Close()
 
-	cmd := exec.Command("pdftotext", "-layout", "-nopgbrk", tmp.Name(), "-")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("pdftotext failed: %w", err)
-	}
-	text := strings.TrimSpace(string(out))
+	var errs []string
+	text := ""
 
-	// Also pull visible + annotated links via pdftohtml xml when available.
-	xmlCmd := exec.Command("pdftohtml", "-xml", "-stdout", "-i", "-hidden", tmp.Name())
-	if xmlOut, xmlErr := xmlCmd.Output(); xmlErr == nil {
-		extra := stripXML(string(xmlOut))
+	if out, err := exec.Command("pdftotext", "-layout", "-nopgbrk", tmp.Name(), "-").Output(); err == nil {
+		text = strings.TrimSpace(string(out))
+	} else {
+		errs = append(errs, fmt.Sprintf("pdftotext: %v", err))
+	}
+
+	// Prefer richer text from pdftohtml when available.
+	if xmlOut, xmlErr := exec.Command("pdftohtml", "-xml", "-stdout", "-i", "-hidden", tmp.Name()).Output(); xmlErr == nil {
+		extra := strings.TrimSpace(stripXML(string(xmlOut)))
 		if len(extra) > len(text) {
-			text = strings.TrimSpace(extra)
+			text = extra
 		}
 	}
+
+	if len(text) < 40 {
+		if pyText, pyErr := extractPDFTextPython(tmp.Name()); pyErr == nil && len(strings.TrimSpace(pyText)) > len(text) {
+			text = strings.TrimSpace(pyText)
+		} else if pyErr != nil {
+			errs = append(errs, fmt.Sprintf("pymupdf: %v", pyErr))
+		}
+	}
+
+	if text == "" {
+		if len(errs) == 0 {
+			return "", fmt.Errorf("no text extracted from pdf")
+		}
+		return "", fmt.Errorf("pdf text extraction failed (%s)", strings.Join(errs, "; "))
+	}
 	return text, nil
+}
+
+func extractPDFTextPython(pdfPath string) (string, error) {
+	python := strings.TrimSpace(os.Getenv("PDF_PYTHON"))
+	if python == "" {
+		python = "python3"
+	}
+	script := strings.TrimSpace(os.Getenv("EXTRACT_PDF_SCRIPT"))
+	if script == "" {
+		candidates := []string{
+			"/app/scripts/extract_pdf_text.py",
+			"scripts/extract_pdf_text.py",
+			"services/api/scripts/extract_pdf_text.py",
+		}
+		for _, c := range candidates {
+			if st, err := os.Stat(c); err == nil && !st.IsDir() {
+				script = c
+				break
+			}
+		}
+	}
+	if script == "" {
+		return "", fmt.Errorf("extract_pdf_text.py not found")
+	}
+	out, err := exec.Command(python, script, pdfPath).Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 func extractPDFLinksFromXML(content []byte) []string {
