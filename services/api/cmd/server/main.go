@@ -78,7 +78,7 @@ func main() {
 	if store.EnabledRedis() {
 		redisStatus = "redis"
 	}
-	log.Printf("api listening on :%s (resume_forge=%s gemini=%s groq=%s cache=%s)", cfg.Port, cfg.ResumeForgeURL, geminiStatus, groqStatus, redisStatus)
+	log.Printf("api listening on :%s (resume_forge=%s gemini=%s groq=%s cache=%s cors=%v)", cfg.Port, cfg.ResumeForgeURL, geminiStatus, groqStatus, redisStatus, cfg.CORSOrigins)
 	if err := engine.Run(":" + cfg.Port); err != nil {
 		log.Fatal(err)
 	}
