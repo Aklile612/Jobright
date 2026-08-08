@@ -1,14 +1,11 @@
 # Deploy notes for EthioDeploy / Render / Railway
 
-## Why the build failed
+## Why builds fail on EthioDeploy
 
-This is a **monorepo**. The repo root has no `go.mod` or `package.json`, so Nixpacks cannot detect a language by itself.
+1. **Monorepo** — no `go.mod` at repo root, so auto-detect fails without `nixpacks.toml`.
+2. **Go version** — EthioDeploy’s Nixpacks nixpkgs often has no `go_1_22` package (`undefined variable 'go_1_22'`), and plain `go` is too old (`cannot compile Go 1.22 code`).
 
-Also pin **Go 1.22+** in `nixpacks.toml` (`go_1_22`). Older Nixpacks `go` packages fail with:
-
-```text
-cannot compile Go 1.22 code
-```
+**Fix in repo:** `nixpacks.toml` downloads **official Go 1.22.12** from `go.dev` and builds `services/api`.
 
 ## Deploy the API (recommended)
 
