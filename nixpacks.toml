@@ -1,11 +1,15 @@
 # Monorepo: language lives in services/api, not at repo root.
-# This gives Nixpacks (EthioDeploy) an explicit build plan.
+# EthioDeploy wraps this Nixpacks plan in Docker.
 
 [phases.setup]
-nixPkgs = ["go"]
+# Must be >= go.mod (1.22). Plain "go" is often too old → "cannot compile Go 1.22 code".
+nixPkgs = ["go_1_22"]
 
 [phases.install]
-cmds = ["cd services/api && go mod download"]
+cmds = [
+  "go version",
+  "cd services/api && go mod download"
+]
 
 [phases.build]
 cmds = [
@@ -18,6 +22,7 @@ cmds = [
 cmd = "/app/bin/api"
 
 [variables]
+NIXPACKS_GO_VERSION = "1.22"
 UPLOAD_DIR = "/app/storage/resumes"
 STAMP_PDF_SCRIPT = "/app/scripts/stamp_pdf.py"
 PORT = "8080"
