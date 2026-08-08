@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -656,15 +657,30 @@ func pickHonestKeywords(in []string, max int) []string {
 
 func resolveStampTools() (python, script string) {
 	if v := strings.TrimSpace(os.Getenv("PDF_PYTHON")); v != "" {
-		python = v
+		if st, err := os.Stat(v); err == nil && !st.IsDir() {
+			python = v
+		} else if p, err := exec.LookPath(v); err == nil {
+			python = p
+		}
 	}
 	if v := strings.TrimSpace(os.Getenv("STAMP_PDF_SCRIPT")); v != "" {
-		script = v
+		if st, err := os.Stat(v); err == nil && !st.IsDir() {
+			script = v
+		}
 	}
-	roots := []string{".", "..", "../..", "../../.."}
+
+	roots := []string{".", "..", "../..", "../../..", "/app"}
 	if python == "" {
+		candidates := []string{
+			"/app/.venv-pdf/bin/python",
+			"/app/.venv-pdf/bin/python3",
+			".venv-pdf/bin/python",
+			".venv-pdf/bin/python3",
+		}
 		for _, r := range roots {
-			p := filepath.Join(r, ".venv-pdf", "bin", "python")
+			candidates = append(candidates, filepath.Join(r, ".venv-pdf", "bin", "python"))
+		}
+		for _, p := range candidates {
 			if st, err := os.Stat(p); err == nil && !st.IsDir() {
 				python, _ = filepath.Abs(p)
 				break
@@ -672,19 +688,40 @@ func resolveStampTools() (python, script string) {
 		}
 	}
 	if python == "" {
+		for _, name := range []string{"python3", "python"} {
+			if p, err := exec.LookPath(name); err == nil {
+				python = p
+				break
+			}
+		}
+	}
+	if python == "" {
 		python = "python3"
 	}
+
 	if script == "" {
-		for _, r := range roots {
-			p := filepath.Join(r, "services", "api", "scripts", "stamp_pdf.py")
+		for _, p := range []string{
+			"/app/scripts/stamp_pdf.py",
+			"scripts/stamp_pdf.py",
+			"services/api/scripts/stamp_pdf.py",
+		} {
 			if st, err := os.Stat(p); err == nil && !st.IsDir() {
 				script, _ = filepath.Abs(p)
 				break
 			}
 		}
+		if script == "" {
+			for _, r := range roots {
+				p := filepath.Join(r, "services", "api", "scripts", "stamp_pdf.py")
+				if st, err := os.Stat(p); err == nil && !st.IsDir() {
+					script, _ = filepath.Abs(p)
+					break
+				}
+			}
+		}
 	}
 	if script == "" {
-		script = "services/api/scripts/stamp_pdf.py"
+		script = "/app/scripts/stamp_pdf.py"
 	}
 	return python, script
 }
