@@ -24,8 +24,12 @@ type Config struct {
 }
 
 func Load() Config {
+	port := getenv("API_PORT", "")
+	if port == "" {
+		port = getenv("PORT", "8080") // EthioDeploy / Render / Railway
+	}
 	return Config{
-		Port:           getenv("API_PORT", "8080"),
+		Port:           port,
 		DatabaseURL:    getenv("DATABASE_URL", "postgres://jobright:jobright@localhost:5432/jobright?sslmode=disable"),
 		JWTSecret:      getenv("JWT_SECRET", "dev-secret-change-me"),
 		JWTExpiry:      durationHours("JWT_EXPIRY_HOURS", 72),
@@ -37,7 +41,7 @@ func Load() Config {
 		GeminiModel:    getenv("GEMINI_MODEL", "gemini-2.0-flash"),
 		GroqAPIKey:     getenv("GROQ_API_KEY", ""),
 		GroqModel:      getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
-		RedisURL:       getenv("REDIS_URL", "redis://localhost:6379/0"),
+		RedisURL:       getenv("REDIS_URL", ""),
 	}
 }
 
