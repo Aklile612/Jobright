@@ -28,12 +28,29 @@ func Load() Config {
 	if port == "" {
 		port = getenv("PORT", "8080") // EthioDeploy / Render / Railway
 	}
+	corsRaw := getenv("CORS_ORIGINS", "*")
+	origins := splitCSV(corsRaw)
+	// Unless CORS_STRICT is on, always allow any browser origin. Operators often set a
+	// mistyped CORS_ORIGINS on EthioDeploy; that previously broke Vercel signup entirely.
+	strict := strings.EqualFold(getenv("CORS_STRICT", ""), "true") || strings.EqualFold(getenv("CORS_STRICT", ""), "1")
+	if !strict {
+		hasStar := false
+		for _, o := range origins {
+			if o == "*" {
+				hasStar = true
+				break
+			}
+		}
+		if !hasStar {
+			origins = append(origins, "*")
+		}
+	}
 	return Config{
 		Port:           port,
 		DatabaseURL:    getenv("DATABASE_URL", "postgres://jobright:jobright@localhost:5432/jobright?sslmode=disable"),
 		JWTSecret:      getenv("JWT_SECRET", "dev-secret-change-me"),
 		JWTExpiry:      durationHours("JWT_EXPIRY_HOURS", 72),
-		CORSOrigins:    splitCSV(getenv("CORS_ORIGINS", "http://localhost:3000")),
+		CORSOrigins:    origins,
 		ResumeForgeURL: strings.TrimRight(getenv("RESUME_FORGE_URL", "http://localhost:8000"), "/"),
 		UploadDir:      getenv("UPLOAD_DIR", "../../storage/resumes"),
 		MaxUploadBytes: int64(getenvInt("MAX_UPLOAD_BYTES", 6*1024*1024)),
@@ -73,8 +90,18 @@ func splitCSV(v string) []string {
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
+		p = strings.Trim(p, `"'`)
+		p = strings.TrimRight(p, "/")
 		if p != "" {
 			out = append(out, p)
+		}
+	}
+	// Also accept FRONTEND_URL / WEB_URL if operators set those instead of CORS_ORIGINS.
+	for _, key := range []string{"FRONTEND_URL", "WEB_URL", "PUBLIC_WEB_URL"} {
+		if extra := strings.TrimSpace(os.Getenv(key)); extra != "" {
+			extra = strings.Trim(extra, `"'`)
+			extra = strings.TrimRight(extra, "/")
+			out = append(out, extra)
 		}
 	}
 	return out
