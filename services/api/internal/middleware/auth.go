@@ -20,21 +20,27 @@ type Claims struct {
 func CORS(origins []string) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(origins))
 	for _, o := range origins {
-		allowed[o] = struct{}{}
+		o = strings.TrimSpace(o)
+		if o != "" {
+			allowed[o] = struct{}{}
+		}
 	}
 	return func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
-		if _, ok := allowed[origin]; ok || len(origins) == 0 {
+		origin := strings.TrimSpace(c.GetHeader("Origin"))
+		_, ok := allowed[origin]
+		if ok || len(allowed) == 0 {
 			if origin != "" {
 				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Vary", "Origin")
 			} else if len(origins) > 0 {
-				c.Header("Access-Control-Allow-Origin", origins[0])
+				c.Header("Access-Control-Allow-Origin", strings.TrimSpace(origins[0]))
 			}
 		}
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		if c.Request.Method == "OPTIONS" {
+			// Always end preflight; browser still requires Allow-Origin when Origin was sent.
 			c.AbortWithStatus(204)
 			return
 		}
