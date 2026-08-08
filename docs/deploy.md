@@ -2,10 +2,12 @@
 
 ## Why the build failed
 
-This is a **monorepo**. The repo root has no `go.mod` or `package.json`, so Nixpacks cannot detect a language:
+This is a **monorepo**. The repo root has no `go.mod` or `package.json`, so Nixpacks cannot detect a language by itself.
 
-```
-Nixpacks was unable to generate a build plan for this app.
+Also pin **Go 1.22+** in `nixpacks.toml` (`go_1_22`). Older Nixpacks `go` packages fail with:
+
+```text
+cannot compile Go 1.22 code
 ```
 
 ## Deploy the API (recommended)
