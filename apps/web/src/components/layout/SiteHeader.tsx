@@ -23,6 +23,7 @@ export function SiteHeader({ solid = false }: { solid?: boolean }) {
     <header className={`site-header ${solid ? "is-solid" : ""}`}>
       <div className="container site-header__inner">
         <Link href="/" className="brand">
+          <img src="/logo.svg" alt="" width={28} height={28} className="brand__mark" />
           JobRight
         </Link>
         <nav className="site-nav">
