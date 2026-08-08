@@ -35,6 +35,16 @@ func New(deps Deps) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery(), gin.Logger(), middleware.CORS(deps.Config.CORSOrigins))
 
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"service":  "jobright-api",
+			"status":   "ok",
+			"health":   "/health",
+			"api":      "/api/v1",
+			"frontend": "http://localhost:3000",
+		})
+	})
+
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
