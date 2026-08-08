@@ -1,20 +1,21 @@
-# Monorepo: language lives in services/api, not at repo root.
-# EthioDeploy wraps this Nixpacks plan in Docker.
+# EthioDeploy always uses Nixpacks. Their nixpkgs pin has no `go_1_22`
+# package, so we install official Go from go.dev instead.
 
 [phases.setup]
-# Must be >= go.mod (1.22). Plain "go" is often too old → "cannot compile Go 1.22 code".
-nixPkgs = ["go_1_22"]
+aptPkgs = ["curl", "ca-certificates", "gcc", "libc6-dev"]
 
 [phases.install]
 cmds = [
-  "go version",
-  "cd services/api && go mod download"
+  "curl -fsSL https://go.dev/dl/go1.22.12.linux-amd64.tar.gz -o /tmp/go.tgz",
+  "rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz",
+  "/usr/local/go/bin/go version",
+  "cd services/api && /usr/local/go/bin/go mod download"
 ]
 
 [phases.build]
 cmds = [
   "mkdir -p /app/bin /app/storage/resumes",
-  "cd services/api && CGO_ENABLED=0 go build -o /app/bin/api ./cmd/server",
+  "cd services/api && CGO_ENABLED=0 /usr/local/go/bin/go build -o /app/bin/api ./cmd/server",
   "cp -R services/api/scripts /app/scripts || true"
 ]
 
@@ -22,7 +23,7 @@ cmds = [
 cmd = "/app/bin/api"
 
 [variables]
-NIXPACKS_GO_VERSION = "1.22"
+PATH = "/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 UPLOAD_DIR = "/app/storage/resumes"
 STAMP_PDF_SCRIPT = "/app/scripts/stamp_pdf.py"
 PORT = "8080"
