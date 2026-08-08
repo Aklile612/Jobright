@@ -15,10 +15,7 @@ export default async function HomePage() {
       <section className="hero">
         <div className="container hero__content">
           <p className="badge">Software engineering jobs</p>
-          <h1 className="hero__brand">
-            <img src="/logo.svg" alt="" width={56} height={56} className="hero__mark" />
-            JobRight
-          </h1>
+          <h1 className="hero__brand">JobRight</h1>
           <p className="hero__copy">
             Less noise. More shipped applications — tailor your resume to each
             role, copy a cover letter, and apply on the employer site.
