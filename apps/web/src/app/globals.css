@@ -93,10 +93,21 @@ select {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   font-family: var(--font-display);
   font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: -0.04em;
+}
+
+.brand__mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  flex-shrink: 0;
 }
 
 .site-nav {
@@ -250,12 +261,23 @@ select {
 }
 
 .hero__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
   font-family: var(--font-display);
   font-size: clamp(3rem, 8vw, 4.75rem);
   font-weight: 700;
   letter-spacing: -0.05em;
   line-height: 0.95;
   margin: var(--space-3) 0 0;
+}
+
+.hero__mark {
+  display: block;
+  width: clamp(2.5rem, 6vw, 3.5rem);
+  height: clamp(2.5rem, 6vw, 3.5rem);
+  border-radius: 12px;
+  flex-shrink: 0;
 }
 
 .hero__copy {
