@@ -3,6 +3,7 @@ package resumes
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,8 +32,10 @@ func NewService(db *gorm.DB, authSvc *auth.Service, forgeClient *forge.Client, u
 }
 
 type UploadResult struct {
-	Resume  *models.Resume `json:"resume"`
-	Profile gin.H          `json:"profile"`
+	Resume     *models.Resume `json:"resume"`
+	Profile    gin.H          `json:"profile"`
+	ParseOK    bool           `json:"parse_ok"`
+	ParseError string         `json:"parse_error,omitempty"`
 }
 
 func (s *Service) List(userID uuid.UUID) ([]models.Resume, error) {
@@ -71,8 +74,20 @@ func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, c
 		name = strings.TrimSuffix(filepath.Base(filename), ext)
 	}
 
-	text, links, _ := resumeparse.ExtractDocument(filename, content)
+	text, links, extractErr := resumeparse.ExtractDocument(filename, content)
+	if extractErr != nil {
+		log.Printf("resume parse extract failed user=%s file=%s: %v", userID, filename, extractErr)
+	}
 	draft := resumeparse.ParseProfile(text, links)
+	parseOK := strings.TrimSpace(draft.RawText) != "" || draft.Name != "" || draft.Phone != "" ||
+		draft.LinkedIn != "" || draft.GitHub != "" || len(draft.Skills) > 0
+	parseErrMsg := ""
+	if extractErr != nil {
+		parseErrMsg = extractErr.Error()
+	} else if !parseOK {
+		parseErrMsg = "could not extract text from resume (scanned/image PDF?)"
+		log.Printf("resume parse empty user=%s file=%s bytes=%d", userID, filename, len(content))
+	}
 
 	resume := &models.Resume{
 		ID:          id,
@@ -145,7 +160,9 @@ func (s *Service) Upload(userID uuid.UUID, name, filename, contentType string, c
 	go s.syncForge(userID, resume, content)
 
 	return &UploadResult{
-		Resume: resume,
+		Resume:     resume,
+		ParseOK:    parseOK,
+		ParseError: parseErrMsg,
 		Profile: gin.H{
 			"id":                user.ID,
 			"email":             user.Email,
