@@ -601,3 +601,32 @@ select {
   font-size: 0.85rem;
   line-height: 1.45;
 }
+
+.prepare-layout {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 0.75rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+  align-items: start;
+}
+
+.prepare-history {
+  position: sticky;
+  top: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  padding: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+@media (max-width: 900px) {
+  .prepare-layout {
+    grid-template-columns: 1fr;
+  }
+  .prepare-history {
+    position: static;
+    max-height: none;
+  }
+}
