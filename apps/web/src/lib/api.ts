@@ -71,8 +71,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }, true),
-  listJobs: (q = "", limit = 40) =>
-    request<Job[]>(`/api/v1/jobs?q=${encodeURIComponent(q)}&limit=${limit}`),
+  listJobs: (q = "", limit = 24, offset = 0) =>
+    request<{ items: Job[]; total: number; limit: number; offset: number }>(
+      `/api/v1/jobs?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`,
+    ),
   getJob: (id: string) => request<Job>(`/api/v1/jobs/${id}`),
   syncJobs: () =>
     request<{ results: { source: string; ingested: number; error?: string }[] }>(
