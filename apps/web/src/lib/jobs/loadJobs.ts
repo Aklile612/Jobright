@@ -2,14 +2,20 @@ import type { Job } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
-export async function loadSoftwareJobs(): Promise<Job[]> {
-  // Fast path: read from Postgres (no scrape). Sync is separate / throttled on the API.
-  const fromApi = await loadFromGoApi(false);
-  if (fromApi.length > 0) return fromApi;
+export type JobsPage = {
+  items: Job[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export async function loadSoftwareJobs(limit = 24, offset = 0): Promise<Job[]> {
+  const page = await loadJobsPage("", limit, offset, false);
+  if (page.items.length > 0 || page.total > 0) return page.items;
 
   // Empty DB only: sync once, then list again.
-  const afterSync = await loadFromGoApi(true);
-  if (afterSync.length > 0) return afterSync;
+  const afterSync = await loadJobsPage("", limit, offset, true);
+  if (afterSync.items.length > 0) return afterSync.items;
 
   const fromRemotive = await loadFromRemotive();
   if (fromRemotive.length > 0) return fromRemotive;
@@ -17,7 +23,12 @@ export async function loadSoftwareJobs(): Promise<Job[]> {
   return demoJobs();
 }
 
-async function loadFromGoApi(forceSync: boolean): Promise<Job[]> {
+export async function loadJobsPage(
+  q = "",
+  limit = 24,
+  offset = 0,
+  forceSync = false,
+): Promise<JobsPage> {
   if (forceSync) {
     try {
       await fetch(`${API_URL}/api/v1/jobs/sync`, {
@@ -30,15 +41,25 @@ async function loadFromGoApi(forceSync: boolean): Promise<Job[]> {
   }
 
   try {
-    const res = await fetch(`${API_URL}/api/v1/jobs?limit=60`, {
-      // Allow Next to cache briefly; API also caches in Redis.
-      next: { revalidate: 60 },
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
     });
-    if (!res.ok) return [];
-    const jobs = (await res.json()) as Job[];
-    return Array.isArray(jobs) ? jobs : [];
+    if (q.trim()) params.set("q", q.trim());
+    const res = await fetch(`${API_URL}/api/v1/jobs?${params}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return { items: [], total: 0, limit, offset };
+    const data = await res.json();
+    // Support both new page shape and legacy array responses.
+    if (Array.isArray(data)) {
+      return { items: data as Job[], total: data.length, limit, offset };
+    }
+    const items = Array.isArray(data?.items) ? (data.items as Job[]) : [];
+    const total = typeof data?.total === "number" ? data.total : items.length;
+    return { items, total, limit, offset };
   } catch {
-    return [];
+    return { items: [], total: 0, limit, offset };
   }
 }
 
