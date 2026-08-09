@@ -47,7 +47,7 @@ func main() {
 	groqClient := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 	store := cache.New(cfg.RedisURL)
 	authSvc := auth.NewService(db, forgeClient, cfg.JWTSecret, cfg.JWTExpiry)
-	jobSvc := jobs.NewService(db, store)
+	jobSvc := jobs.NewService(db, store, cfg)
 	resumeSvc := resumes.NewService(db, authSvc, forgeClient, cfg.UploadDir, cfg.MaxUploadBytes)
 	appSvc := applications.NewService(db, authSvc, resumeSvc, forgeClient)
 	bookmarkSvc := bookmarks.NewService(db)
