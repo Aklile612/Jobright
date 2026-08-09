@@ -22,6 +22,10 @@
 | `CORS_STRICT` | set `true` only if you want an exact allowlist from `CORS_ORIGINS` |
 | `PORT` | usually injected by the platform |
 | `GROQ_API_KEY` / `GEMINI_API_KEY` | optional AI |
+| `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | optional — Adzuna job aggregator |
+| `ADZUNA_COUNTRIES` | optional — default `us,gb,de,ca` |
+| `MUSE_API_KEY` | optional — The Muse (works without key; key raises limits) |
+| `JSEARCH_API_KEY` or `RAPIDAPI_KEY` | optional — JSearch via RapidAPI |
 | `REDIS_URL` | leave empty (in-memory cache) |
 | `UPLOAD_DIR` | `/app/storage/resumes` |
 
