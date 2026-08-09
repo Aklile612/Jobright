@@ -30,6 +30,10 @@ func (s *Service) SyncSoftwareJobs() ([]SyncResult, error) {
 		s.syncRemotive(),
 		s.syncArbeitnow(),
 		s.syncRemoteOK(),
+		s.syncMuse(),
+		s.syncJobspresso(),
+		s.syncAdzuna(),
+		s.syncJSearch(),
 	}
 	s.EndSync()
 	return results, nil
@@ -94,60 +98,80 @@ func (s *Service) syncRemotive() SyncResult {
 
 func (s *Service) syncArbeitnow() SyncResult {
 	res := SyncResult{Source: "arbeitnow"}
-	req, err := http.NewRequest(http.MethodGet, "https://www.arbeitnow.com/api/job-board-api", nil)
-	if err != nil {
-		res.Error = err.Error()
-		return res
-	}
-	req.Header.Set("User-Agent", "jobright/1.0")
 	client := &http.Client{Timeout: 25 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		res.Error = err.Error()
-		return res
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		res.Error = err.Error()
-		return res
-	}
-	var payload struct {
-		Data []struct {
-			Slug        string   `json:"slug"`
-			URL         string   `json:"url"`
-			Title       string   `json:"title"`
-			CompanyName string   `json:"company_name"`
-			Description string   `json:"description"`
-			Location    string   `json:"location"`
-			Tags        []string `json:"tags"`
-			Remote      bool     `json:"remote"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		res.Error = err.Error()
-		return res
-	}
-	for _, j := range payload.Data {
-		if !isSoftwareRelated(j.Title, j.Tags) {
-			continue
+	// Arbeitnow paginates; pull several pages so the DB has more than one screen of roles.
+	for page := 1; page <= 8; page++ {
+		url := "https://www.arbeitnow.com/api/job-board-api"
+		if page > 1 {
+			url = fmt.Sprintf("%s?page=%d", url, page)
 		}
-		loc := j.Location
-		if j.Remote && loc == "" {
-			loc = "Remote"
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			res.Error = err.Error()
+			break
 		}
-		job := &models.Job{
-			Title:       strings.TrimSpace(j.Title),
-			Company:     strings.TrimSpace(j.CompanyName),
-			Description: stripHTML(j.Description),
-			Location:    loc,
-			SourceURL:   strings.TrimSpace(j.URL),
+		req.Header.Set("User-Agent", "jobright/1.0")
+		resp, err := client.Do(req)
+		if err != nil {
+			res.Error = err.Error()
+			break
 		}
-		if job.Title == "" || job.SourceURL == "" {
-			continue
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		resp.Body.Close()
+		if err != nil {
+			res.Error = err.Error()
+			break
 		}
-		if err := s.UpsertBySourceURL(job); err == nil {
-			res.Ingested++
+		if resp.StatusCode >= 300 {
+			res.Error = fmt.Sprintf("http %d", resp.StatusCode)
+			break
+		}
+		var payload struct {
+			Data []struct {
+				Slug        string   `json:"slug"`
+				URL         string   `json:"url"`
+				Title       string   `json:"title"`
+				CompanyName string   `json:"company_name"`
+				Description string   `json:"description"`
+				Location    string   `json:"location"`
+				Tags        []string `json:"tags"`
+				Remote      bool     `json:"remote"`
+			} `json:"data"`
+			Links struct {
+				Next *string `json:"next"`
+			} `json:"links"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			res.Error = err.Error()
+			break
+		}
+		if len(payload.Data) == 0 {
+			break
+		}
+		for _, j := range payload.Data {
+			if !isSoftwareRelated(j.Title, j.Tags) {
+				continue
+			}
+			loc := j.Location
+			if j.Remote && loc == "" {
+				loc = "Remote"
+			}
+			job := &models.Job{
+				Title:       strings.TrimSpace(j.Title),
+				Company:     strings.TrimSpace(j.CompanyName),
+				Description: stripHTML(j.Description),
+				Location:    loc,
+				SourceURL:   strings.TrimSpace(j.URL),
+			}
+			if job.Title == "" || job.SourceURL == "" {
+				continue
+			}
+			if err := s.UpsertBySourceURL(job); err == nil {
+				res.Ingested++
+			}
+		}
+		if payload.Links.Next == nil || strings.TrimSpace(*payload.Links.Next) == "" {
+			break
 		}
 	}
 	return res
