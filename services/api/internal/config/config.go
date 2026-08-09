@@ -21,6 +21,11 @@ type Config struct {
 	GroqAPIKey      string
 	GroqModel       string
 	RedisURL        string
+	AdzunaAppID     string
+	AdzunaAppKey    string
+	AdzunaCountries []string
+	MuseAPIKey      string
+	JSearchAPIKey   string
 }
 
 func Load() Config {
@@ -46,19 +51,24 @@ func Load() Config {
 		}
 	}
 	return Config{
-		Port:           port,
-		DatabaseURL:    getenv("DATABASE_URL", "postgres://jobright:jobright@localhost:5432/jobright?sslmode=disable"),
-		JWTSecret:      getenv("JWT_SECRET", "dev-secret-change-me"),
-		JWTExpiry:      durationHours("JWT_EXPIRY_HOURS", 72),
-		CORSOrigins:    origins,
-		ResumeForgeURL: strings.TrimRight(getenv("RESUME_FORGE_URL", "http://localhost:8000"), "/"),
-		UploadDir:      getenv("UPLOAD_DIR", "../../storage/resumes"),
-		MaxUploadBytes: int64(getenvInt("MAX_UPLOAD_BYTES", 6*1024*1024)),
-		GeminiAPIKey:   getenv("GEMINI_API_KEY", ""),
-		GeminiModel:    getenv("GEMINI_MODEL", "gemini-2.0-flash"),
-		GroqAPIKey:     getenv("GROQ_API_KEY", ""),
-		GroqModel:      getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
-		RedisURL:       getenv("REDIS_URL", ""),
+		Port:            port,
+		DatabaseURL:     getenv("DATABASE_URL", "postgres://jobright:jobright@localhost:5432/jobright?sslmode=disable"),
+		JWTSecret:       getenv("JWT_SECRET", "dev-secret-change-me"),
+		JWTExpiry:       durationHours("JWT_EXPIRY_HOURS", 72),
+		CORSOrigins:     origins,
+		ResumeForgeURL:  strings.TrimRight(getenv("RESUME_FORGE_URL", "http://localhost:8000"), "/"),
+		UploadDir:       getenv("UPLOAD_DIR", "../../storage/resumes"),
+		MaxUploadBytes:  int64(getenvInt("MAX_UPLOAD_BYTES", 6*1024*1024)),
+		GeminiAPIKey:    getenv("GEMINI_API_KEY", ""),
+		GeminiModel:     getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+		GroqAPIKey:      getenv("GROQ_API_KEY", ""),
+		GroqModel:       getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
+		RedisURL:        getenv("REDIS_URL", ""),
+		AdzunaAppID:     getenv("ADZUNA_APP_ID", ""),
+		AdzunaAppKey:    getenv("ADZUNA_APP_KEY", ""),
+		AdzunaCountries: splitCSV(getenv("ADZUNA_COUNTRIES", "us,gb,de,ca")),
+		MuseAPIKey:      getenv("MUSE_API_KEY", ""),
+		JSearchAPIKey:   firstNonEmpty(getenv("JSEARCH_API_KEY", ""), getenv("RAPIDAPI_KEY", "")),
 	}
 }
 
@@ -83,6 +93,15 @@ func getenvInt(key string, fallback int) int {
 
 func durationHours(key string, fallback int) time.Duration {
 	return time.Duration(getenvInt(key, fallback)) * time.Hour
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func splitCSV(v string) []string {
