@@ -27,12 +27,19 @@ type createJobRequest struct {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	jobs, err := h.svc.List(c.Query("q"), parseInt(c.Query("limit"), 20), parseInt(c.Query("offset"), 0))
+	limit := parseInt(c.Query("limit"), 24)
+	offset := parseInt(c.Query("offset"), 0)
+	jobs, total, err := h.svc.List(c.Query("q"), limit, offset)
 	if err != nil {
 		response.Internal(c, "failed to list jobs")
 		return
 	}
-	response.OK(c, jobs)
+	response.OK(c, gin.H{
+		"items":  jobs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
 func (h *Handler) Get(c *gin.Context) {
