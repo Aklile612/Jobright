@@ -26,6 +26,8 @@
 | `ADZUNA_COUNTRIES` | optional — default `us,gb,de,ca` |
 | `MUSE_API_KEY` | optional — The Muse (works without key; key raises limits) |
 | `JSEARCH_API_KEY` or `RAPIDAPI_KEY` | optional — JSearch via RapidAPI |
+| `AI_RATE_LIMIT` | optional — max AI requests per window per user (default `20`) |
+| `AI_RATE_WINDOW_SEC` | optional — window seconds (default `60`) |
 | `REDIS_URL` | leave empty (in-memory cache) |
 | `UPLOAD_DIR` | `/app/storage/resumes` |
 
