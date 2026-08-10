@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jobright/api/internal/ai"
@@ -78,7 +79,14 @@ func New(deps Deps) *gin.Engine {
 		deps.Scraper.Register(protected.Group("/admin"))
 		deps.Extension.Register(protected.Group("/ext"))
 		if deps.AI != nil {
-			deps.AI.Register(protected.Group("/ai"))
+			aiGroup := protected.Group("/ai")
+			window := time.Duration(deps.Config.AIRateWindowSec) * time.Second
+			if window <= 0 {
+				window = time.Minute
+			}
+			// Costly AI routes (analyze / tailor / cover letter) — per authenticated user.
+			aiGroup.Use(middleware.RateLimit(deps.Config.AIRateLimit, window))
+			deps.AI.Register(aiGroup)
 		}
 	}
 
