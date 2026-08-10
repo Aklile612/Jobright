@@ -26,6 +26,8 @@ type Config struct {
 	AdzunaCountries []string
 	MuseAPIKey      string
 	JSearchAPIKey   string
+	AIRateLimit     int
+	AIRateWindowSec int
 }
 
 func Load() Config {
@@ -69,6 +71,8 @@ func Load() Config {
 		AdzunaCountries: splitCSV(getenv("ADZUNA_COUNTRIES", "us,gb,de,ca")),
 		MuseAPIKey:      getenv("MUSE_API_KEY", ""),
 		JSearchAPIKey:   firstNonEmpty(getenv("JSEARCH_API_KEY", ""), getenv("RAPIDAPI_KEY", "")),
+		AIRateLimit:     getenvInt("AI_RATE_LIMIT", 20),
+		AIRateWindowSec: getenvInt("AI_RATE_WINDOW_SEC", 60),
 	}
 }
 
